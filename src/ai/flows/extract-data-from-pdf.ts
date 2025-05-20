@@ -11,7 +11,7 @@
 import { ai } from '@/ai/genkit';
 import {z} from 'genkit';
 import Tesseract from 'tesseract.js';
-import * as pdfjsLib from 'pdfjs-dist/build/pdf.js';
+import * as pdfjsLib from 'pdfjs-dist'; // Changed import
 // pdfjsLib.GlobalWorkerOptions.workerSrc = require.resolve('pdfjs-dist/build/pdf.worker.js'); // May be needed depending on environment
 import { createCanvas } from 'canvas';
 
@@ -211,3 +211,4 @@ const extractDataFromPdfFlow = ai.defineFlow(
     }
   }
 );
+
