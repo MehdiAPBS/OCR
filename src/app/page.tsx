@@ -1,9 +1,11 @@
+
 "use client";
 
 import { useState, useEffect, type ChangeEvent } from 'react';
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
+import { Label } from "@/components/ui/label";
 import PdfViewer from "@/components/pdf-viewer";
 import DataEditor from "@/components/data-editor";
 import { extractDataFromPdf, type ExtractDataFromPdfOutput } from "@/ai/flows/extract-data-from-pdf";
@@ -80,15 +82,37 @@ export default function PdfExtractorPage() {
     setError(null);
 
     try {
+      // Use the imported type for better safety
       const result: ExtractDataFromPdfOutput = await extractDataFromPdf({ pdfDataUri });
-      if (result && result.extractedData) {
-        setExtractedData(result.extractedData);
-        toast({
-          title: "Data Extracted",
-          description: "PDF data has been successfully extracted.",
-        });
+
+      // Check if jsonOutput exists, is not empty, and not just an empty JSON object string
+      if (result && result.jsonOutput && result.jsonOutput.trim() !== '' && result.jsonOutput.trim() !== '{}') {
+        try {
+          // Parse the JSON string from jsonOutput
+          const parsedData = JSON.parse(result.jsonOutput);
+          setExtractedData(parsedData);
+          toast({
+            title: "Data Extracted",
+            description: "PDF data has been successfully extracted.",
+          });
+        } catch (parseError: any) {
+          // This catch handles errors from JSON.parse
+          console.error("Error parsing AI output as JSON:", parseError, "Raw output:", result.jsonOutput);
+          // Throw a new error that will be caught by the outer catch block
+          throw new Error(`Failed to parse AI output. The AI returned: ${result.jsonOutput}`);
+        }
       } else {
-        throw new Error("AI did not return extracted data.");
+        // This 'else' means AI did not return jsonOutput, it was empty, or it was an empty object string.
+        let errorMessage = "AI did not return expected data format or returned empty data.";
+        if (!result) {
+            errorMessage = "No response from AI service.";
+        } else if (!result.jsonOutput) {
+            errorMessage = "AI response missing 'jsonOutput' field.";
+        } else if (result.jsonOutput.trim() === '' || result.jsonOutput.trim() === '{}') {
+            errorMessage = "AI returned empty data. Please check the PDF or try again.";
+        }
+        console.error("Problematic AI Result:", errorMessage, "Full result object:", result);
+        throw new Error(errorMessage);
       }
     } catch (err: any) {
       console.error("Error processing PDF:", err);
