@@ -20,82 +20,91 @@ const ExtractDataFromPdfInputSchema = z.object({
 });
 export type ExtractDataFromPdfInput = z.infer<typeof ExtractDataFromPdfInputSchema>;
 
-const ExtractDataFromPdfOutputSchema = z.object({jsonOutput: z.string().describe('The extracted data from the PDF, as a JSON string.'),});
+// Schema for the actual data structure we want the AI to extract
+const ExtractedPdfDataSchema = z.object({
+  classe: z.string().describe('The class concerned by the attendance sheet. Return "" if not found.'),
+  cours: z.string().describe('The course concerned by the attendance sheet. Return "" if not found.'),
+  date: z.string().describe('The date of the attendance sheet. Return "" if not found.'),
+  nom_du_professeur: z.string().describe('The name of the professor. Return "" if not found.'),
+  nombre_des_présents: z.number().describe('The total number of attendees. Return 0 if not found.'),
+  salle_n: z.string().describe('The room number. Return "" if not found.'),
+  séance: z.string().describe('The session time. Return "" if not found.'),
+  présences: z.array(z.object({
+    n: z.string().describe("The student number. Return \"\" if not found."),
+    nom_prénom: z.string().describe("The student's full name. Return \"\" if not found."),
+  })).describe('An array representing the attendees. Return [] if not found or if data is missing for all attendees.'),
+});
+// This type is internal to the flow's processing.
+
+// Schema for the flow's final output to the frontend (still a stringified JSON)
+const ExtractDataFromPdfOutputSchema = z.object({
+  jsonOutput: z.string().describe('The extracted data from the PDF, as a JSON string.'),
+});
 export type ExtractDataFromPdfOutput = z.infer<typeof ExtractDataFromPdfOutputSchema>;
 
+
 export async function extractDataFromPdf(input: ExtractDataFromPdfInput): Promise<ExtractDataFromPdfOutput> {
- const response = await extractDataFromPdfFlow(input);
- return response;
+  return extractDataFromPdfFlow(input);
 }
 
 const extractDataFromPdfPromptObj = ai.definePrompt({
   name: 'extractDataFromPdfPrompt',
-  input: { schema: ExtractDataFromPdfInputSchema }, // Changed from PromptInputSchema to ExtractDataFromPdfInputSchema
-  output: { schema: ExtractDataFromPdfOutputSchema },
+  input: { schema: ExtractDataFromPdfInputSchema },
+  output: { schema: ExtractedPdfDataSchema }, // AI is now asked to output the direct data structure
   prompt: `You are an expert data extraction specialist.
-You will receive a PDF document. Your task is to analyze this document and extract all the relevant information from it and return it as a JSON object.
+You will receive a PDF document. Your task is to analyze this document and extract all the relevant information from it.
 
-The JSON object (which will be the string value for the 'jsonOutput' key) should have the following top-level keys:
-- \`classe\` (string): The class concerned by the attendance sheet.
-- \`cours\` (string): The course concerned by the attendance sheet.
-- \`date\` (string): The date of the attendance sheet.
-- \`nom_du_professeur\` (string): The name of the professor.
-- \`nombre_des_présents\` (number): The total number of attendees.
-- \`salle_n\` (string): The room number.
-- \`séance\` (string): The session time.
-- \`présences\` (array of objects): An array representing the attendees. Each object in the array should have two keys:
-  - \`n\` (string): The student number.
-  - \`nom_prénom\` (string): The student's full name.
+Return the extracted data as a JSON object strictly conforming to the provided schema.
 
 CRITICAL INSTRUCTION FOR HANDLING MISSING DATA:
-If any individual field specified above (e.g., \`classe\`, \`cours\`, \`date\`, \`nom_du_professeur\`, \`salle_n\`, \`séance\`) cannot be found or determined from the PDF, you MUST include the key in the JSON output but use an empty string \`""\` as its value.
-For the \`nombre_des_présents\` field, if it cannot be determined, use the number \`0\`.
-For the \`présences\` array, if no attendees are found or the data is missing, you MUST include the \`présences\` key with an empty array \`[]\` as its value. Within objects in the 'présences' array, if 'n' or 'nom_prénom' cannot be found, use an empty string \`""\` for their values.
-DO NOT OMIT ANY KEYS specified in the structure. The goal is to always return a JSON string that strictly conforms to the defined structure, using empty/default values for missing information.
-
-Format the entire JSON object (structured as described above) as a single string value for the 'jsonOutput' key. Only output the JSON object containing the 'jsonOutput' key. For example: {"jsonOutput": "{\\"classe\\": \\"...", \\"présences\\": [], ...}"}
+- For all string fields (e.g., \`classe\`, \`cours\`, \`date\`, \`nom_du_professeur\`, \`salle_n\`, \`séance\`, and within \`présences\`: \`n\`, \`nom_prénom\`), if the information cannot be found or determined from the PDF, you MUST use an empty string \`""\` as its value for that field.
+- For the \`nombre_des_présents\` field (a number), if it cannot be determined, you MUST use the number \`0\` as its value.
+- For the \`présences\` array, if no attendees are found or the data is missing for all attendees, you MUST use an empty array \`[]\` as its value. If some attendees are found but some details are missing for an individual attendee, apply the empty string rule for their \`n\` or \`nom_prénom\` fields.
+- DO NOT OMIT ANY KEYS specified in the schema. The goal is to always return a JSON object that strictly conforms to the defined structure, using these empty/default values for missing information.
 
 PDF Document:
-{{media url=pdfDataUri}}`, // Changed from ocrText to pdfDataUri
+{{media url=pdfDataUri}}`,
 });
 
 const extractDataFromPdfFlow = ai.defineFlow(
   {
     name: 'extractDataFromPdfFlow',
     inputSchema: ExtractDataFromPdfInputSchema,
-    outputSchema: ExtractDataFromPdfOutputSchema,
+    outputSchema: ExtractDataFromPdfOutputSchema, // Flow still outputs the stringified version for the frontend
   },
   async (flowInput) => {
-    console.log('Input to Genkit prompt (AI model):', { pdfDataUriLength: flowInput.pdfDataUri.length }); // Log length to avoid huge data in logs
+    console.log('Input to Genkit flow for PDF processing. PDF Data URI length:', flowInput.pdfDataUri.length);
 
-    let response;
+    const defaultEmptyStructuredData = {
+      classe: "",
+      cours: "",
+      date: "",
+      nom_du_professeur: "",
+      nombre_des_présents: 0,
+      salle_n: "",
+      séance: "",
+      présences: [],
+    };
+    const defaultEmptyJsonOutputString = JSON.stringify(defaultEmptyStructuredData);
+
     try {
-      // Pass the original flowInput (which contains pdfDataUri) directly to the prompt
-      response = await extractDataFromPdfPromptObj(flowInput);
-      console.log('Full response object from AI prompt:', response);
+      const { output: structuredData } = await extractDataFromPdfPromptObj(flowInput);
+
+      if (!structuredData) {
+        console.error('AI model did not return structured data. Returning default empty structure.');
+        return { jsonOutput: defaultEmptyJsonOutputString };
+      }
+      
+      // structuredData should be an object matching ExtractedPdfDataSchema due to Genkit's schema enforcement.
+      // Now, stringify this structured data for the jsonOutput field.
+      const jsonOutputString = JSON.stringify(structuredData);
+      console.log('Successfully extracted data from AI. Stringified output (snippet):', jsonOutputString.substring(0, 250) + (jsonOutputString.length > 250 ? "..." : ""));
+      return { jsonOutput: jsonOutputString };
+
     } catch (error: any) {
-      console.error('Error during AI model interaction:', error.message, error.stack);
-      // Return a structured empty JSON string for jsonOutput in case of AI error
-      return { jsonOutput: '{"classe":"","cours":"","date":"","nom_du_professeur":"","nombre_des_présents":0,"salle_n":"","séance":"","présences":[]}' };
-    }
-
-    if (!response || typeof response !== 'object' || !('jsonOutput' in response)) {
-      console.error('AI response is missing "jsonOutput", not an object, or null. Raw response:', response);
-      return { jsonOutput: '{"classe":"","cours":"","date":"","nom_du_professeur":"","nombre_des_présents":0,"salle_n":"","séance":"","présences":[]}' };
-    }
-
-    const jsonOutputValue = response.jsonOutput;
-    if (typeof jsonOutputValue !== 'string') {
-      console.error('The value of "jsonOutput" is not a string. Value:', jsonOutputValue);
-      return { jsonOutput: '{"classe":"","cours":"","date":"","nom_du_professeur":"","nombre_des_présents":0,"salle_n":"","séance":"","présences":[]}' };
-    }
-
-    try {
-      JSON.parse(jsonOutputValue); // Validate the inner JSON string
-      return response; // Return { jsonOutput: "stringified_json_data" }
-    } catch (parseError: any) {
-      console.error('Error parsing jsonOutput string as JSON:', parseError.message, 'String value was:', jsonOutputValue);
-      return { jsonOutput: '{"classe":"","cours":"","date":"","nom_du_professeur":"","nombre_des_présents":0,"salle_n":"","séance":"","présences":[]}' };
+      console.error('Error during AI model interaction or data processing in extractDataFromPdfFlow:', error.message, error.stack);
+      // In case of any error during the prompt call or processing, return the default empty structure.
+      return { jsonOutput: defaultEmptyJsonOutputString };
     }
   }
 );
