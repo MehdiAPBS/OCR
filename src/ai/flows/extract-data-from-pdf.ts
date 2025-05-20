@@ -10,6 +10,8 @@
 
 import { ai } from '@/ai/genkit';
 import {z} from 'genkit';
+import type { ExtractedPdfData} from '@/ai/schemas/pdf-data-schema'; // Import the type
+import { ExtractedPdfDataSchema } from '@/ai/schemas/pdf-data-schema'; // Import the Zod schema
 
 // Schema for the overall flow input
 const ExtractDataFromPdfInputSchema = z.object({
@@ -20,25 +22,10 @@ const ExtractDataFromPdfInputSchema = z.object({
 });
 export type ExtractDataFromPdfInput = z.infer<typeof ExtractDataFromPdfInputSchema>;
 
-// Schema for the actual data structure we want the AI to extract
-const ExtractedPdfDataSchema = z.object({
-  classe: z.string().describe('The class concerned by the attendance sheet. Return "" if not found.'),
-  cours: z.string().describe('The course concerned by the attendance sheet. Return "" if not found.'),
-  date: z.string().describe('The date of the attendance sheet. Return "" if not found.'),
-  nom_du_professeur: z.string().describe('The name of the professor. Return "" if not found.'),
-  nombre_des_présents: z.number().describe('The total number of attendees. Return 0 if not found.'),
-  salle_n: z.string().describe('The room number. Return "" if not found.'),
-  séance: z.string().describe('The session time. Return "" if not found.'),
-  présences: z.array(z.object({
-    n: z.string().describe("The student number. Return \"\" if not found."),
-    nom_prénom: z.string().describe("The student's full name. Return \"\" if not found."),
-  })).describe('An array representing the attendees. Return [] if not found or if data is missing for all attendees.'),
-});
-// This type is internal to the flow's processing.
-
-// Schema for the flow's final output to the frontend (still a stringified JSON)
+// Schema for the flow's final output to the frontend
 const ExtractDataFromPdfOutputSchema = z.object({
   jsonOutput: z.string().describe('The extracted data from the PDF, as a JSON string.'),
+  error: z.string().optional().describe('An error message if extraction failed.'),
 });
 export type ExtractDataFromPdfOutput = z.infer<typeof ExtractDataFromPdfOutputSchema>;
 
@@ -49,8 +36,8 @@ export async function extractDataFromPdf(input: ExtractDataFromPdfInput): Promis
 
 const extractDataFromPdfPromptObj = ai.definePrompt({
   name: 'extractDataFromPdfPrompt',
-  input: { schema: ExtractDataFromPdfInputSchema },
-  output: { schema: ExtractedPdfDataSchema }, // AI is now asked to output the direct data structure
+  input: { schema: ExtractDataFromPdfInputSchema }, // AI prompt still takes the PDF URI
+  output: { schema: ExtractedPdfDataSchema }, // AI is asked to output the direct data structure
   prompt: `You are an expert data extraction specialist.
 You will receive a PDF document. Your task is to analyze this document and extract all the relevant information from it.
 
@@ -70,12 +57,12 @@ const extractDataFromPdfFlow = ai.defineFlow(
   {
     name: 'extractDataFromPdfFlow',
     inputSchema: ExtractDataFromPdfInputSchema,
-    outputSchema: ExtractDataFromPdfOutputSchema, // Flow still outputs the stringified version for the frontend
+    outputSchema: ExtractDataFromPdfOutputSchema, // Flow outputs the stringified version + optional error
   },
   async (flowInput) => {
     console.log('Input to Genkit flow for PDF processing. PDF Data URI length:', flowInput.pdfDataUri.length);
 
-    const defaultEmptyStructuredData = {
+    const defaultEmptyStructuredData: ExtractedPdfData = { // Use the imported type
       classe: "",
       cours: "",
       date: "",
@@ -88,23 +75,24 @@ const extractDataFromPdfFlow = ai.defineFlow(
     const defaultEmptyJsonOutputString = JSON.stringify(defaultEmptyStructuredData);
 
     try {
+      // The prompt is expected to return an object matching ExtractedPdfDataSchema
       const { output: structuredData } = await extractDataFromPdfPromptObj(flowInput);
 
       if (!structuredData) {
-        console.error('AI model did not return structured data. Returning default empty structure.');
-        return { jsonOutput: defaultEmptyJsonOutputString };
+        const errorMessage = "AI model did not return structured data.";
+        console.error(errorMessage, 'Input to prompt:', flowInput);
+        return { jsonOutput: defaultEmptyJsonOutputString, error: errorMessage };
       }
       
-      // structuredData should be an object matching ExtractedPdfDataSchema due to Genkit's schema enforcement.
       // Now, stringify this structured data for the jsonOutput field.
       const jsonOutputString = JSON.stringify(structuredData);
       console.log('Successfully extracted data from AI. Stringified output (snippet):', jsonOutputString.substring(0, 250) + (jsonOutputString.length > 250 ? "..." : ""));
-      return { jsonOutput: jsonOutputString };
+      return { jsonOutput: jsonOutputString }; // No error
 
     } catch (error: any) {
-      console.error('Error during AI model interaction or data processing in extractDataFromPdfFlow:', error.message, error.stack);
-      // In case of any error during the prompt call or processing, return the default empty structure.
-      return { jsonOutput: defaultEmptyJsonOutputString };
+      const errorMessage = `AI processing error: ${error.message}`;
+      console.error('Error during AI model interaction or data processing in extractDataFromPdfFlow:', error.message, error.stack, 'Input to prompt:', flowInput);
+      return { jsonOutput: defaultEmptyJsonOutputString, error: errorMessage };
     }
   }
 );

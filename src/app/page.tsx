@@ -9,15 +9,16 @@ import { Label } from "@/components/ui/label";
 import PdfViewer from "@/components/pdf-viewer";
 import DataEditor from "@/components/data-editor";
 import { extractDataFromPdf, type ExtractDataFromPdfOutput } from "@/ai/flows/extract-data-from-pdf";
+import type { ExtractedPdfData } from "@/ai/schemas/pdf-data-schema";
 import { useToast } from "@/hooks/use-toast";
-import { UploadCloud, Cpu, FileJson, Loader2, AlertTriangle, FileText, Edit3 } from 'lucide-react';
+import { UploadCloud, Cpu, FileJson, Loader2, AlertTriangle } from 'lucide-react';
 
 export default function PdfExtractorPage() {
   const [pdfFile, setPdfFile] = useState<File | null>(null);
   const [pdfObjectUrl, setPdfObjectUrl] = useState<string | null>(null);
   const [pdfDataUri, setPdfDataUri] = useState<string | null>(null);
   
-  const [extractedData, setExtractedData] = useState<Record<string, any> | null>(null);
+  const [extractedData, setExtractedData] = useState<ExtractedPdfData | null>(null);
   
   const [isLoading, setIsLoading] = useState<boolean>(false);
   const [error, setError] = useState<string | null>(null);
@@ -80,56 +81,78 @@ export default function PdfExtractorPage() {
 
     setIsLoading(true);
     setError(null);
+    setExtractedData(null); // Reset on new processing attempt
 
     try {
-      // Use the imported type for better safety
       const result: ExtractDataFromPdfOutput = await extractDataFromPdf({ pdfDataUri });
 
-      // Check if jsonOutput exists, is not empty, and not just an empty JSON object string
+      if (result && result.error) {
+        console.error("Error from AI flow:", result.error, "Full result object:", result);
+        const displayError = result.error;
+        setError(displayError);
+        setExtractedData(null);
+        toast({
+          title: "Extraction Failed",
+          description: displayError,
+          variant: "destructive",
+        });
+        setIsLoading(false);
+        return;
+      }
+      
       if (result && result.jsonOutput && result.jsonOutput.trim() !== '' && result.jsonOutput.trim() !== '{}') {
         try {
-          // Parse the JSON string from jsonOutput
-          const parsedData = JSON.parse(result.jsonOutput);
+          const parsedData: ExtractedPdfData = JSON.parse(result.jsonOutput);
           setExtractedData(parsedData);
           toast({
             title: "Data Extracted",
             description: "PDF data has been successfully extracted.",
           });
         } catch (parseError: any) {
-          // This catch handles errors from JSON.parse
           console.error("Error parsing AI output as JSON:", parseError, "Raw output:", result.jsonOutput);
-          // Throw a new error that will be caught by the outer catch block
-          throw new Error(`Failed to parse AI output. The AI returned: ${result.jsonOutput}`);
+          const displayError = "Failed to parse AI output. The AI returned an unexpected format.";
+          setError(displayError);
+          setExtractedData(null); 
+          toast({
+            title: "Parsing Failed",
+            description: displayError,
+            variant: "destructive",
+          });
         }
       } else {
-        // This 'else' means AI did not return jsonOutput, it was empty, or it was an empty object string.
         let errorMessage = "AI did not return expected data format or returned empty data.";
         if (!result) {
             errorMessage = "No response from AI service.";
         } else if (!result.jsonOutput) {
             errorMessage = "AI response missing 'jsonOutput' field.";
         } else if (result.jsonOutput.trim() === '' || result.jsonOutput.trim() === '{}') {
-            errorMessage = "AI returned empty data. Please check the PDF or try again.";
+            errorMessage = "AI returned empty data. Please check the PDF content or try again.";
         }
         console.error("Problematic AI Result:", errorMessage, "Full result object:", result);
-        throw new Error(errorMessage);
+        setError(errorMessage);
+        setExtractedData(null);
+        toast({
+          title: "Extraction Incomplete",
+          description: errorMessage,
+          variant: "destructive",
+        });
       }
-    } catch (err: any) {
-      console.error("Error processing PDF:", err);
+    } catch (err: any) { // This catch is for errors *calling* the flow, or other unexpected client-side errors
+      console.error("Error processing PDF in client:", err);
       const errorMessage = err.message || "An unknown error occurred during PDF processing.";
       setError(errorMessage);
+      setExtractedData(null);
       toast({
-        title: "Extraction Failed",
+        title: "Processing Error",
         description: errorMessage,
         variant: "destructive",
       });
-      setExtractedData(null);
     } finally {
       setIsLoading(false);
     }
   };
 
-  const handleDataChange = (updatedData: Record<string, any>) => {
+  const handleDataChange = (updatedData: ExtractedPdfData) => {
     setExtractedData(updatedData);
   };
 
@@ -144,8 +167,6 @@ export default function PdfExtractorPage() {
     }
 
     try {
-      // Ensure that any stringified JSON within values is properly handled or validated if necessary
-      // For now, we assume `extractedData` is the source of truth for download.
       const jsonString = JSON.stringify(extractedData, null, 2);
       const blob = new Blob([jsonString], { type: "application/json" });
       const url = URL.createObjectURL(blob);
@@ -251,3 +272,4 @@ export default function PdfExtractorPage() {
     </div>
   );
 }
+
