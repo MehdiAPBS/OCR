@@ -1,3 +1,4 @@
+
 'use server';
 /**
  * @fileOverview Extracts data from a PDF using OCR and AI.
@@ -35,7 +36,7 @@ const prompt = ai.definePrompt({
   prompt: `You are an expert data extraction specialist.
 You will receive a PDF document and your task is to extract all the relevant information from it and return it as a JSON object. Use OCR to read the PDF content.
 
-The JSON object should have the following top-level keys:
+The JSON object (which will be the string value for the 'jsonOutput' key) should have the following top-level keys:
 - \`classe\` (string): The class concerned by the attendance sheet.
 - \`cours\` (string): The course concerned by the attendance sheet.
 - \`date\` (string): The date of the attendance sheet.
@@ -47,7 +48,13 @@ The JSON object should have the following top-level keys:
   - \`n\` (string): The student number.
   - \`nom_prénom\` (string): The student's full name.
 
-Extract the information from the PDF and format the entire JSON object as a single string value for the 'jsonOutput' key. Only output the JSON object containing the 'jsonOutput' key.
+CRITICAL INSTRUCTION FOR HANDLING MISSING DATA:
+If any individual field specified above (e.g., \`classe\`, \`cours\`, \`date\`, \`nom_du_professeur\`, \`salle_n\`, \`séance\`) cannot be found or determined from the PDF, you MUST include the key in the JSON output but use an empty string \`""\` as its value.
+For the \`nombre_des_présents\` field, if it cannot be determined, use the number \`0\`.
+For the \`présences\` array, if no attendees are found or the data is missing, you MUST include the \`présences\` key with an empty array \`[]\` as its value. Within objects in the 'présences' array, if 'n' or 'nom_prénom' cannot be found, use an empty string \`""\` for their values.
+DO NOT OMIT ANY KEYS specified in the structure. The goal is to always return a JSON string that strictly conforms to the defined structure, using empty/default values for missing information.
+
+Extract the information from the PDF and format the entire JSON object (structured as described above) as a single string value for the 'jsonOutput' key. Only output the JSON object containing the 'jsonOutput' key. For example: {"jsonOutput": "{\\"classe\\": \\"...", \\"présences\\": [], ...}"}
 
 PDF Document: {{media url=pdfDataUri}}`,
 });
@@ -60,22 +67,23 @@ const extractDataFromPdfFlow = ai.defineFlow(
   }, 
   async (input) => {
     console.log('Input to prompt:', input); // Log input
-    let response;
+    let response; // This will hold the structured output from the prompt call
     try {
-      response = await prompt(input);
-      // Log the full response object
+      // 'prompt' is a function that takes 'ExtractDataFromPdfInputSchema'
+      // and returns a Promise of 'ExtractDataFromPdfOutputSchema'.
+      // So, 'response' here should be of type ExtractDataFromPdfOutputSchema if successful.
+      response = await prompt(input); 
       console.log('Full response object from AI prompt:', response); 
     } catch (error) {
       console.error('Error during AI model interaction:', error); // Log AI errors
-      // Return a default empty structure on error
- return { jsonOutput: '{}' };
+      // Return a default structure consistent with ExtractDataFromPdfOutputSchema on error
+      return { jsonOutput: '{}' }; 
     }
 
-    // Check if the response is an object and has the jsonOutput property
+    // Check if the 'response' (structured output from prompt) is valid and contains 'jsonOutput'
     if (!response || typeof response !== 'object' || !('jsonOutput' in response)) {
-      console.error('AI response is missing the "jsonOutput" property or is not an object. Raw response:', response);
-      // Return a default empty structure
-      return { jsonOutput: '{}' };
+      console.error('AI response (after prompt processing) is missing the "jsonOutput" property, is not an object, or is null/undefined. Raw response:', response);
+      return { jsonOutput: '{}' }; 
     }
 
     const jsonOutputValue = response.jsonOutput;
@@ -83,18 +91,18 @@ const extractDataFromPdfFlow = ai.defineFlow(
     // Check if the jsonOutput value is a string
     if (typeof jsonOutputValue !== 'string') {
       console.error('The value of "jsonOutput" is not a string. Value:', jsonOutputValue);
-      // Return a default empty structure
- return { jsonOutput: '{}' };
+      return { jsonOutput: '{}' };
     }
 
     try {
-      // Attempt to parse the jsonOutput string to validate it
+      // Attempt to parse the jsonOutput string to validate it's valid JSON.
+      // This is the inner JSON string that should contain the actual extracted data.
       JSON.parse(jsonOutputValue);
-      // If parsing is successful, return the response object
- return response;
+      // If parsing is successful, return the 'response' object which is { jsonOutput: "string_of_json_data" }
+      return response;
     } catch (parseError) {
       console.error('Error parsing jsonOutput string as JSON:', parseError, 'String value:', jsonOutputValue);
-      // Return a default empty structure if parsing fails
+      // If parsing the inner JSON string fails, return a default structure
       return { jsonOutput: '{}' };
     }
   }
