@@ -2,6 +2,7 @@
 'use server';
 /**
  * @fileOverview Saves extracted PDF data to a Google Sheet.
+ * Each student will be on a new row, with other PDF data repeated.
  *
  * - saveToGoogleSheet - A function that handles saving data to Google Sheets.
  * - SaveToGoogleSheetInput - The input type for the saveToGoogleSheet function.
@@ -48,7 +49,6 @@ const saveToGoogleSheetFlow = ai.defineFlow(
     let credentials;
     try {
       credentials = JSON.parse(serviceAccountCredsJsonString);
-      // Ensure private_key newlines are correctly formatted
       if (credentials && credentials.private_key) {
         credentials.private_key = credentials.private_key.replace(/\\n/g, '\n');
       }
@@ -69,25 +69,20 @@ const saveToGoogleSheetFlow = ai.defineFlow(
 
       const sheets = google.sheets({ version: 'v4', auth });
 
-      const headerRow = [
+      const newHeaderRow = [
         'Classe',
         'Cours',
         'Date',
         'Nom du Professeur',
-        'Nombre des Présents',
+        'Nombre des Présents (du PDF)',
         'Salle N°',
         'Séance',
-        'Présences', // Updated Header
+        'N° Étudiant',
+        'Nom & Prénom Étudiant',
       ];
 
-      let presencesString = "";
-      if (data.présences && data.présences.length > 0) {
-        presencesString = data.présences
-          .map(p => `${p.n || 'N/A'} - ${p.nom_prénom || 'N/A'}`)
-          .join('\n');
-      }
-
-      const values = [
+      const rowsToAppend: (string | number | boolean | null)[][] = [];
+      const commonData = [
         data.classe ?? "",
         data.cours ?? "",
         data.date ?? "",
@@ -95,17 +90,33 @@ const saveToGoogleSheetFlow = ai.defineFlow(
         data.nombre_des_présents ?? 0,
         data.salle_n ?? "",
         data.séance ?? "",
-        presencesString, // Use the formatted string
       ];
+
+      if (data.présences && data.présences.length > 0) {
+        for (const student of data.présences) {
+          rowsToAppend.push([
+            ...commonData,
+            student.n ?? "",
+            student.nom_prénom ?? "",
+          ]);
+        }
+      } else {
+        // If no students, add one row with common data and blank student fields
+        rowsToAppend.push([
+          ...commonData,
+          "", // N° Étudiant
+          "", // Nom & Prénom Étudiant
+        ]);
+      }
 
       let sheetNeedsHeader = true;
       try {
         const headerCheck = await sheets.spreadsheets.values.get({
             spreadsheetId,
-            range: 'Sheet1!A1:H1', 
+            range: `Sheet1!A1:${String.fromCharCode(64 + newHeaderRow.length)}1`, // Dynamically set range for header check
         });
         if (headerCheck.data.values && headerCheck.data.values.length > 0) {
-            if (JSON.stringify(headerCheck.data.values[0]) === JSON.stringify(headerRow)) {
+            if (JSON.stringify(headerCheck.data.values[0]) === JSON.stringify(newHeaderRow)) {
                  sheetNeedsHeader = false;
             }
         }
@@ -113,18 +124,17 @@ const saveToGoogleSheetFlow = ai.defineFlow(
           if (getHeaderError.message && getHeaderError.message.includes("Unable to parse range")) {
               sheetNeedsHeader = true;
           } else if (getHeaderError.response && getHeaderError.response.data && getHeaderError.response.data.error && getHeaderError.response.data.error.message.includes("Requested entity was not found")) {
-              // This means the sheet exists but is empty or the range doesn't exist.
               sheetNeedsHeader = true;
           } else {
             console.warn("Could not definitively check for header due to an error, proceeding as if header might be needed. Error:", getHeaderError.message);
           }
       }
       
-      const rowsToAppend = [];
+      const finalRowsForSheet = [];
       if (sheetNeedsHeader) {
-          rowsToAppend.push(headerRow);
+          finalRowsForSheet.push(newHeaderRow);
       }
-      rowsToAppend.push(values);
+      finalRowsForSheet.push(...rowsToAppend);
 
       const response = await sheets.spreadsheets.values.append({
         spreadsheetId,
@@ -132,14 +142,14 @@ const saveToGoogleSheetFlow = ai.defineFlow(
         valueInputOption: 'USER_ENTERED', 
         insertDataOption: 'INSERT_ROWS', 
         requestBody: {
-          values: rowsToAppend,
+          values: finalRowsForSheet,
         },
       });
 
       console.log('Successfully saved to Google Sheet:', response.data);
       return {
         success: true,
-        message: 'Data successfully saved to Google Sheet.',
+        message: `Data successfully saved to Google Sheet. ${rowsToAppend.length} student row(s) added.`,
         spreadsheetId: response.data.spreadsheetId,
         updatedRange: response.data.updates?.updatedRange,
       };
@@ -153,4 +163,3 @@ const saveToGoogleSheetFlow = ai.defineFlow(
     }
   }
 );
-
