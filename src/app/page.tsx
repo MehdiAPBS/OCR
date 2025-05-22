@@ -9,9 +9,10 @@ import { Label } from "@/components/ui/label";
 import PdfViewer from "@/components/pdf-viewer";
 import DataEditor from "@/components/data-editor";
 import { extractDataFromPdf, type ExtractDataFromPdfOutput } from "@/ai/flows/extract-data-from-pdf";
+import { saveToMongoDb, type SaveToMongoDbOutput } from "@/ai/flows/save-to-mongodb";
 import type { ExtractedPdfData } from "@/ai/schemas/pdf-data-schema";
 import { useToast } from "@/hooks/use-toast";
-import { UploadCloud, Cpu, FileJson, Loader2, AlertTriangle } from 'lucide-react';
+import { UploadCloud, Cpu, FileJson, Loader2, AlertTriangle, Database } from 'lucide-react';
 
 export default function PdfExtractorPage() {
   const [pdfFile, setPdfFile] = useState<File | null>(null);
@@ -21,12 +22,12 @@ export default function PdfExtractorPage() {
   const [extractedData, setExtractedData] = useState<ExtractedPdfData | null>(null);
   
   const [isLoading, setIsLoading] = useState<boolean>(false);
+  const [isSavingToMongoDb, setIsSavingToMongoDb] = useState<boolean>(false);
   const [error, setError] = useState<string | null>(null);
 
   const { toast } = useToast();
 
   useEffect(() => {
-    // Clean up object URL when component unmounts or pdfFile changes
     return () => {
       if (pdfObjectUrl) {
         URL.revokeObjectURL(pdfObjectUrl);
@@ -39,16 +40,14 @@ export default function PdfExtractorPage() {
     if (file && file.type === "application/pdf") {
       setPdfFile(file);
       setError(null);
-      setExtractedData(null); // Reset extracted data
+      setExtractedData(null); 
 
-      // Create Object URL for PDF Viewer
       if (pdfObjectUrl) {
         URL.revokeObjectURL(pdfObjectUrl);
       }
       const newObjectUrl = URL.createObjectURL(file);
       setPdfObjectUrl(newObjectUrl);
 
-      // Create Data URI for AI processing
       const reader = new FileReader();
       reader.onloadend = () => {
         setPdfDataUri(reader.result as string);
@@ -81,14 +80,14 @@ export default function PdfExtractorPage() {
 
     setIsLoading(true);
     setError(null);
-    setExtractedData(null); // Reset on new processing attempt
+    setExtractedData(null); 
 
     try {
       const result: ExtractDataFromPdfOutput = await extractDataFromPdf({ pdfDataUri });
 
       if (result && result.error) {
         console.error("Error from AI flow:", result.error, "Full result object:", result);
-        const displayError = result.error;
+        const displayError = `AI Flow Error: ${result.error}`;
         setError(displayError);
         setExtractedData(null);
         toast({
@@ -120,24 +119,32 @@ export default function PdfExtractorPage() {
           });
         }
       } else {
-        let errorMessage = "AI did not return expected data format or returned empty data.";
+        let errorMessage = "AI did not return expected data format or returned empty/default data.";
         if (!result) {
             errorMessage = "No response from AI service.";
         } else if (!result.jsonOutput) {
             errorMessage = "AI response missing 'jsonOutput' field.";
         } else if (result.jsonOutput.trim() === '' || result.jsonOutput.trim() === '{}') {
-            errorMessage = "AI returned empty data. Please check the PDF content or try again.";
+            errorMessage = "AI returned empty/default data. Review PDF content or prompt if fields are unexpectedly empty.";
         }
-        console.error("Problematic AI Result:", errorMessage, "Full result object:", result);
+        console.warn("Problematic AI Result:", errorMessage, "Full result object:", result);
         setError(errorMessage);
-        setExtractedData(null);
-        toast({
-          title: "Extraction Incomplete",
-          description: errorMessage,
-          variant: "destructive",
-        });
+        // If AI returns default empty structure, still display it in the editor
+        try {
+          const parsedData: ExtractedPdfData = result.jsonOutput ? JSON.parse(result.jsonOutput) : null;
+          setExtractedData(parsedData); 
+           if (parsedData) {
+            toast({
+              title: "Extraction Note",
+              description: "AI processed the PDF but returned default/empty values for some or all fields. Data is shown for review.",
+              variant: "default" 
+            });
+          }
+        } catch (e) {
+          setExtractedData(null); // Fallback if even default parsing fails
+        }
       }
-    } catch (err: any) { // This catch is for errors *calling* the flow, or other unexpected client-side errors
+    } catch (err: any) { 
       console.error("Error processing PDF in client:", err);
       const errorMessage = err.message || "An unknown error occurred during PDF processing.";
       setError(errorMessage);
@@ -191,6 +198,43 @@ export default function PdfExtractorPage() {
     }
   };
 
+  const handleSaveToMongoDb = async () => {
+    if (!extractedData) {
+      toast({
+        title: "No Data",
+        description: "There is no extracted data to save.",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    setIsSavingToMongoDb(true);
+    try {
+      const result: SaveToMongoDbOutput = await saveToMongoDb(extractedData);
+      if (result.success) {
+        toast({
+          title: "Saved to MongoDB",
+          description: `${result.message} (ID: ${result.recordId || 'N/A'})`,
+        });
+      } else {
+        toast({
+          title: "MongoDB Save Failed",
+          description: result.message,
+          variant: "destructive",
+        });
+      }
+    } catch (err: any) {
+      console.error("Error saving to MongoDB:", err);
+      toast({
+        title: "MongoDB Save Error",
+        description: err.message || "An unknown error occurred while saving to MongoDB.",
+        variant: "destructive",
+      });
+    } finally {
+      setIsSavingToMongoDb(false);
+    }
+  };
+
   return (
     <div className="flex flex-col min-h-screen bg-background p-4 md:p-8 selection:bg-primary/20">
       <header className="mb-8">
@@ -203,7 +247,7 @@ export default function PdfExtractorPage() {
       </header>
 
       <div className="mb-8 p-6 bg-card rounded-xl shadow-xl border border-border">
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-6 items-center">
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-6 items-start">
           <div>
             <Label htmlFor="pdf-upload" className="text-lg font-medium mb-2 block text-foreground">
               Upload PDF Document
@@ -219,7 +263,7 @@ export default function PdfExtractorPage() {
               />
               <Button
                 onClick={handleProcessPdf}
-                disabled={isLoading || !pdfFile}
+                disabled={isLoading || !pdfFile || isSavingToMongoDb}
                 className="bg-accent hover:bg-accent/90 text-accent-foreground min-w-[150px] transition-all duration-150 ease-in-out transform active:scale-95"
                 aria-label="Process PDF for data extraction"
               >
@@ -238,16 +282,30 @@ export default function PdfExtractorPage() {
             )}
           </div>
           {extractedData && (
-             <div className="md:text-right">
+             <div className="flex flex-col md:flex-row md:items-center md:justify-end gap-3 mt-4 md:mt-0">
                 <Button
                     onClick={handleDownloadJson}
-                    disabled={!extractedData}
+                    disabled={!extractedData || isLoading || isSavingToMongoDb}
                     variant="outline"
                     className="border-primary text-primary hover:bg-primary/5 hover:text-primary min-w-[150px] transition-all duration-150 ease-in-out"
                     aria-label="Download extracted data as JSON"
                 >
                     <FileJson className="mr-2 h-5 w-5" />
                     Download JSON
+                </Button>
+                <Button
+                    onClick={handleSaveToMongoDb}
+                    disabled={!extractedData || isLoading || isSavingToMongoDb}
+                    variant="outline"
+                    className="border-green-600 text-green-600 hover:bg-green-500/10 hover:text-green-700 min-w-[150px] transition-all duration-150 ease-in-out"
+                    aria-label="Save extracted data to MongoDB"
+                >
+                    {isSavingToMongoDb ? (
+                        <Loader2 className="mr-2 h-5 w-5 animate-spin" />
+                    ) : (
+                        <Database className="mr-2 h-5 w-5" />
+                    )}
+                    {isSavingToMongoDb ? "Saving..." : "Save to DB"}
                 </Button>
             </div>
           )}
@@ -272,4 +330,3 @@ export default function PdfExtractorPage() {
     </div>
   );
 }
-
