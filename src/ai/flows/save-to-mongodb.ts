@@ -11,7 +11,7 @@
 import { ai } from '@/ai/genkit';
 import { z } from 'genkit';
 import { ExtractedPdfDataSchema, type ExtractedPdfData } from '@/ai/schemas/pdf-data-schema';
-import { MongoClient, ObjectId } from 'mongodb';
+import { MongoClient, ObjectId, ServerApiVersion } from 'mongodb';
 
 const MONGO_DATABASE_NAME = 'pdf_data_db';
 const MONGO_COLLECTION_NAME = 'extracted_documents';
@@ -47,7 +47,14 @@ const saveToMongoDbFlow = ai.defineFlow(
       };
     }
 
-    const client = new MongoClient(MONGODB_URI);
+    const client = new MongoClient(MONGODB_URI, {
+      serverApi: {
+        version: ServerApiVersion.v1,
+        strict: true,
+        deprecationErrors: true,
+      },
+      tls: true, // Explicitly enabling TLS, though srv protocol usually implies it
+    });
 
     try {
       await client.connect();
