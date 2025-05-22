@@ -9,7 +9,7 @@ import { Label } from "@/components/ui/label";
 import PdfViewer from "@/components/pdf-viewer";
 import DataEditor from "@/components/data-editor";
 import { extractDataFromPdf, type ExtractDataFromPdfOutput } from "@/ai/flows/extract-data-from-pdf";
-import { saveToMongoDb, type SaveToMongoDbOutput } from "@/ai/flows/save-to-mongodb";
+// Removed: import { saveToMongoDb, type SaveToMongoDbOutput } from "@/ai/flows/save-to-mongodb";
 import type { ExtractedPdfData } from "@/ai/schemas/pdf-data-schema";
 import { useToast } from "@/hooks/use-toast";
 import { UploadCloud, Cpu, FileJson, Loader2, AlertTriangle, Database } from 'lucide-react';
@@ -89,7 +89,7 @@ export default function PdfExtractorPage() {
         console.error("Error from AI flow:", result.error, "Full result object:", result);
         const displayError = `AI Flow Error: ${result.error}`;
         setError(displayError);
-        setExtractedData(null);
+        setExtractedData(null); // Ensure editor stays empty or shows placeholder
         toast({
           title: "Extraction Failed",
           description: displayError,
@@ -111,7 +111,7 @@ export default function PdfExtractorPage() {
           console.error("Error parsing AI output as JSON:", parseError, "Raw output:", result.jsonOutput);
           const displayError = "Failed to parse AI output. The AI returned an unexpected format.";
           setError(displayError);
-          setExtractedData(null); 
+          setExtractedData(null); // Ensure editor stays empty or shows placeholder
           toast({
             title: "Parsing Failed",
             description: displayError,
@@ -131,7 +131,7 @@ export default function PdfExtractorPage() {
         setError(errorMessage);
         // If AI returns default empty structure, still display it in the editor
         try {
-          const parsedData: ExtractedPdfData = result.jsonOutput ? JSON.parse(result.jsonOutput) : null;
+          const parsedData: ExtractedPdfData = result && result.jsonOutput ? JSON.parse(result.jsonOutput) : null;
           setExtractedData(parsedData); 
            if (parsedData) {
             toast({
@@ -141,6 +141,7 @@ export default function PdfExtractorPage() {
             });
           }
         } catch (e) {
+          console.error("Error parsing even default AI output:", e, "Raw output:", result?.jsonOutput);
           setExtractedData(null); // Fallback if even default parsing fails
         }
       }
@@ -148,7 +149,7 @@ export default function PdfExtractorPage() {
       console.error("Error processing PDF in client:", err);
       const errorMessage = err.message || "An unknown error occurred during PDF processing.";
       setError(errorMessage);
-      setExtractedData(null);
+      setExtractedData(null); // Ensure editor stays empty or shows placeholder
       toast({
         title: "Processing Error",
         description: errorMessage,
@@ -210,8 +211,17 @@ export default function PdfExtractorPage() {
 
     setIsSavingToMongoDb(true);
     try {
-      const result: SaveToMongoDbOutput = await saveToMongoDb(extractedData);
-      if (result.success) {
+      const response = await fetch('/api/save-to-mongodb', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(extractedData),
+      });
+
+      const result = await response.json();
+
+      if (response.ok && result.success) {
         toast({
           title: "Saved to MongoDB",
           description: `${result.message} (ID: ${result.recordId || 'N/A'})`,
@@ -219,15 +229,15 @@ export default function PdfExtractorPage() {
       } else {
         toast({
           title: "MongoDB Save Failed",
-          description: result.message,
+          description: result.message || "An unknown error occurred while saving via API.",
           variant: "destructive",
         });
       }
     } catch (err: any) {
-      console.error("Error saving to MongoDB:", err);
+      console.error("Error saving to MongoDB via API:", err);
       toast({
         title: "MongoDB Save Error",
-        description: err.message || "An unknown error occurred while saving to MongoDB.",
+        description: err.message || "An unknown network or client-side error occurred.",
         variant: "destructive",
       });
     } finally {
