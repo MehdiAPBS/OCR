@@ -9,10 +9,10 @@ import { Label } from "@/components/ui/label";
 import PdfViewer from "@/components/pdf-viewer";
 import DataEditor from "@/components/data-editor";
 import { extractDataFromPdf, type ExtractDataFromPdfOutput } from "@/ai/flows/extract-data-from-pdf";
-// Removed: import { saveToMongoDb, type SaveToMongoDbOutput } from "@/ai/flows/save-to-mongodb";
+import { saveToGoogleSheet, type SaveToGoogleSheetOutput } from "@/ai/flows/save-to-google-sheet";
 import type { ExtractedPdfData } from "@/ai/schemas/pdf-data-schema";
 import { useToast } from "@/hooks/use-toast";
-import { UploadCloud, Cpu, FileJson, Loader2, AlertTriangle, Database } from 'lucide-react';
+import { UploadCloud, Cpu, FileJson, Loader2, AlertTriangle, Database, Sheet as SheetIcon } from 'lucide-react';
 
 export default function PdfExtractorPage() {
   const [pdfFile, setPdfFile] = useState<File | null>(null);
@@ -23,6 +23,7 @@ export default function PdfExtractorPage() {
   
   const [isLoading, setIsLoading] = useState<boolean>(false);
   const [isSavingToMongoDb, setIsSavingToMongoDb] = useState<boolean>(false);
+  const [isSavingToSheet, setIsSavingToSheet] = useState<boolean>(false);
   const [error, setError] = useState<string | null>(null);
 
   const { toast } = useToast();
@@ -89,7 +90,7 @@ export default function PdfExtractorPage() {
         console.error("Error from AI flow:", result.error, "Full result object:", result);
         const displayError = `AI Flow Error: ${result.error}`;
         setError(displayError);
-        setExtractedData(null); // Ensure editor stays empty or shows placeholder
+        setExtractedData(null); 
         toast({
           title: "Extraction Failed",
           description: displayError,
@@ -111,7 +112,7 @@ export default function PdfExtractorPage() {
           console.error("Error parsing AI output as JSON:", parseError, "Raw output:", result.jsonOutput);
           const displayError = "Failed to parse AI output. The AI returned an unexpected format.";
           setError(displayError);
-          setExtractedData(null); // Ensure editor stays empty or shows placeholder
+          setExtractedData(null); 
           toast({
             title: "Parsing Failed",
             description: displayError,
@@ -129,7 +130,6 @@ export default function PdfExtractorPage() {
         }
         console.warn("Problematic AI Result:", errorMessage, "Full result object:", result);
         setError(errorMessage);
-        // If AI returns default empty structure, still display it in the editor
         try {
           const parsedData: ExtractedPdfData = result && result.jsonOutput ? JSON.parse(result.jsonOutput) : null;
           setExtractedData(parsedData); 
@@ -142,14 +142,14 @@ export default function PdfExtractorPage() {
           }
         } catch (e) {
           console.error("Error parsing even default AI output:", e, "Raw output:", result?.jsonOutput);
-          setExtractedData(null); // Fallback if even default parsing fails
+          setExtractedData(null); 
         }
       }
     } catch (err: any) { 
       console.error("Error processing PDF in client:", err);
       const errorMessage = err.message || "An unknown error occurred during PDF processing.";
       setError(errorMessage);
-      setExtractedData(null); // Ensure editor stays empty or shows placeholder
+      setExtractedData(null); 
       toast({
         title: "Processing Error",
         description: errorMessage,
@@ -245,6 +245,44 @@ export default function PdfExtractorPage() {
     }
   };
 
+  const handleSaveToSheet = async () => {
+    if (!extractedData) {
+      toast({
+        title: "No Data",
+        description: "There is no extracted data to save to Google Sheet.",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    setIsSavingToSheet(true);
+    try {
+      const result: SaveToGoogleSheetOutput = await saveToGoogleSheet(extractedData);
+      if (result.success) {
+        toast({
+          title: "Saved to Google Sheet",
+          description: result.message,
+        });
+      } else {
+        toast({
+          title: "Google Sheet Save Failed",
+          description: result.message,
+          variant: "destructive",
+        });
+      }
+    } catch (err: any) {
+      console.error("Error saving to Google Sheet via Genkit flow:", err);
+      toast({
+        title: "Google Sheet Save Error",
+        description: err.message || "An unknown error occurred during the Genkit flow.",
+        variant: "destructive",
+      });
+    } finally {
+      setIsSavingToSheet(false);
+    }
+  };
+
+
   return (
     <div className="flex flex-col min-h-screen bg-background p-4 md:p-8 selection:bg-primary/20">
       <header className="mb-8">
@@ -273,7 +311,7 @@ export default function PdfExtractorPage() {
               />
               <Button
                 onClick={handleProcessPdf}
-                disabled={isLoading || !pdfFile || isSavingToMongoDb}
+                disabled={isLoading || !pdfFile || isSavingToMongoDb || isSavingToSheet}
                 className="bg-accent hover:bg-accent/90 text-accent-foreground min-w-[150px] transition-all duration-150 ease-in-out transform active:scale-95"
                 aria-label="Process PDF for data extraction"
               >
@@ -295,7 +333,7 @@ export default function PdfExtractorPage() {
              <div className="flex flex-col md:flex-row md:items-center md:justify-end gap-3 mt-4 md:mt-0">
                 <Button
                     onClick={handleDownloadJson}
-                    disabled={!extractedData || isLoading || isSavingToMongoDb}
+                    disabled={!extractedData || isLoading || isSavingToMongoDb || isSavingToSheet}
                     variant="outline"
                     className="border-primary text-primary hover:bg-primary/5 hover:text-primary min-w-[150px] transition-all duration-150 ease-in-out"
                     aria-label="Download extracted data as JSON"
@@ -305,7 +343,7 @@ export default function PdfExtractorPage() {
                 </Button>
                 <Button
                     onClick={handleSaveToMongoDb}
-                    disabled={!extractedData || isLoading || isSavingToMongoDb}
+                    disabled={!extractedData || isLoading || isSavingToMongoDb || isSavingToSheet}
                     variant="outline"
                     className="border-green-600 text-green-600 hover:bg-green-500/10 hover:text-green-700 min-w-[150px] transition-all duration-150 ease-in-out"
                     aria-label="Save extracted data to MongoDB"
@@ -316,6 +354,20 @@ export default function PdfExtractorPage() {
                         <Database className="mr-2 h-5 w-5" />
                     )}
                     {isSavingToMongoDb ? "Saving..." : "Save to DB"}
+                </Button>
+                <Button
+                    onClick={handleSaveToSheet}
+                    disabled={!extractedData || isLoading || isSavingToMongoDb || isSavingToSheet}
+                    variant="outline"
+                    className="border-blue-500 text-blue-500 hover:bg-blue-500/10 hover:text-blue-600 min-w-[150px] transition-all duration-150 ease-in-out"
+                    aria-label="Save extracted data to Google Sheet"
+                >
+                    {isSavingToSheet ? (
+                        <Loader2 className="mr-2 h-5 w-5 animate-spin" />
+                    ) : (
+                        <SheetIcon className="mr-2 h-5 w-5" />
+                    )}
+                    {isSavingToSheet ? "Saving..." : "Save to Sheet"}
                 </Button>
             </div>
           )}
