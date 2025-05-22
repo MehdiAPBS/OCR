@@ -77,8 +77,15 @@ const saveToGoogleSheetFlow = ai.defineFlow(
         'Nombre des Présents',
         'Salle N°',
         'Séance',
-        'Présences (JSON)',
+        'Présences', // Updated Header
       ];
+
+      let presencesString = "";
+      if (data.présences && data.présences.length > 0) {
+        presencesString = data.présences
+          .map(p => `${p.n || 'N/A'} - ${p.nom_prénom || 'N/A'}`)
+          .join('\n');
+      }
 
       const values = [
         data.classe ?? "",
@@ -88,7 +95,7 @@ const saveToGoogleSheetFlow = ai.defineFlow(
         data.nombre_des_présents ?? 0,
         data.salle_n ?? "",
         data.séance ?? "",
-        JSON.stringify(data.présences ?? []),
+        presencesString, // Use the formatted string
       ];
 
       let sheetNeedsHeader = true;
