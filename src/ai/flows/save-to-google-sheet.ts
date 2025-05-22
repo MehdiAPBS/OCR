@@ -81,7 +81,7 @@ const saveToGoogleSheetFlow = ai.defineFlow(
         'Nom & Prénom Étudiant',
       ];
 
-      const rowsToAppend: (string | number | boolean | null)[][] = [];
+      const dataRowsToAppend: (string | number | boolean | null)[][] = [];
       const commonData = [
         data.classe ?? "",
         data.cours ?? "",
@@ -94,7 +94,7 @@ const saveToGoogleSheetFlow = ai.defineFlow(
 
       if (data.présences && data.présences.length > 0) {
         for (const student of data.présences) {
-          rowsToAppend.push([
+          dataRowsToAppend.push([
             ...commonData,
             student.n ?? "",
             student.nom_prénom ?? "",
@@ -102,7 +102,7 @@ const saveToGoogleSheetFlow = ai.defineFlow(
         }
       } else {
         // If no students, add one row with common data and blank student fields
-        rowsToAppend.push([
+        dataRowsToAppend.push([
           ...commonData,
           "", // N° Étudiant
           "", // Nom & Prénom Étudiant
@@ -111,34 +111,52 @@ const saveToGoogleSheetFlow = ai.defineFlow(
 
       let sheetNeedsHeader = true;
       try {
+        // Construct the range string for checking the header, e.g., "Sheet1!A1:I1"
+        const headerCheckRange = `Sheet1!A1:${String.fromCharCode(64 + newHeaderRow.length)}1`;
         const headerCheck = await sheets.spreadsheets.values.get({
             spreadsheetId,
-            range: `Sheet1!A1:${String.fromCharCode(64 + newHeaderRow.length)}1`, // Dynamically set range for header check
+            range: headerCheckRange,
         });
         if (headerCheck.data.values && headerCheck.data.values.length > 0) {
+            // Compare the fetched header with the expected header
             if (JSON.stringify(headerCheck.data.values[0]) === JSON.stringify(newHeaderRow)) {
                  sheetNeedsHeader = false;
             }
         }
       } catch (getHeaderError: any) {
-          if (getHeaderError.message && getHeaderError.message.includes("Unable to parse range")) {
+          // Handle cases where the sheet might be empty or the range doesn't exist yet
+          if (getHeaderError.message && (getHeaderError.message.includes("Unable to parse range") || getHeaderError.message.includes("Requested entity was not found"))) {
+              // This typically means the sheet is empty or doesn't have enough columns yet, so header is needed.
               sheetNeedsHeader = true;
-          } else if (getHeaderError.response && getHeaderError.response.data && getHeaderError.response.data.error && getHeaderError.response.data.error.message.includes("Requested entity was not found")) {
+          } else if (getHeaderError.response && getHeaderError.response.data && getHeaderError.response.data.error && getHeaderError.response.data.error.code === 404) {
+              // Another way Google API might indicate the sheet/range doesn't exist
               sheetNeedsHeader = true;
-          } else {
-            console.warn("Could not definitively check for header due to an error, proceeding as if header might be needed. Error:", getHeaderError.message);
+          }
+           else {
+            // For other errors, log a warning but proceed cautiously, assuming header might be needed.
+            console.warn("Could not definitively check for header due to an error. Error:", getHeaderError.message);
+            sheetNeedsHeader = true; // Default to needing header on unexpected error
           }
       }
       
       const finalRowsForSheet = [];
       if (sheetNeedsHeader) {
+          console.log("Sheet requires header. Prepending header row.");
           finalRowsForSheet.push(newHeaderRow);
       }
-      finalRowsForSheet.push(...rowsToAppend);
+      finalRowsForSheet.push(...dataRowsToAppend);
+
+      if (finalRowsForSheet.length === 0) {
+        return {
+            success: true,
+            message: 'No data to append to Google Sheet.',
+            spreadsheetId: spreadsheetId,
+        };
+      }
 
       const response = await sheets.spreadsheets.values.append({
         spreadsheetId,
-        range: 'Sheet1!A1', 
+        range: 'Sheet1!A1', // Always append starting from A1, Sheets API handles finding the next empty row.
         valueInputOption: 'USER_ENTERED', 
         insertDataOption: 'INSERT_ROWS', 
         requestBody: {
@@ -149,7 +167,7 @@ const saveToGoogleSheetFlow = ai.defineFlow(
       console.log('Successfully saved to Google Sheet:', response.data);
       return {
         success: true,
-        message: `Data successfully saved to Google Sheet. ${rowsToAppend.length} student row(s) added.`,
+        message: `Data successfully saved to Google Sheet. ${dataRowsToAppend.length} data row(s) added. ${sheetNeedsHeader ? 'Header was also written.' : 'Existing header was used.'}`,
         spreadsheetId: response.data.spreadsheetId,
         updatedRange: response.data.updates?.updatedRange,
       };
@@ -163,3 +181,5 @@ const saveToGoogleSheetFlow = ai.defineFlow(
     }
   }
 );
+
+    
