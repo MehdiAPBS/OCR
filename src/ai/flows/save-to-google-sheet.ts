@@ -36,21 +36,29 @@ const saveToGoogleSheetFlow = ai.defineFlow(
   },
   async (data) => {
     const spreadsheetId = process.env.GOOGLE_SHEET_ID;
-    const serviceAccountCredsJson = process.env.GOOGLE_SERVICE_ACCOUNT_CREDENTIALS_JSON;
+    const serviceAccountCredsJsonString = process.env.GOOGLE_SERVICE_ACCOUNT_CREDENTIALS_JSON;
 
     if (!spreadsheetId) {
       return { success: false, message: 'Google Sheet ID is not configured in environment variables.' };
     }
-    if (!serviceAccountCredsJson) {
+    if (!serviceAccountCredsJsonString) {
       return { success: false, message: 'Google Service Account credentials are not configured in environment variables.' };
     }
 
     let credentials;
     try {
-      credentials = JSON.parse(serviceAccountCredsJson);
-    } catch (error) {
-      console.error('Failed to parse Google Service Account credentials JSON:', error);
-      return { success: false, message: 'Invalid Google Service Account credentials JSON format.' };
+      credentials = JSON.parse(serviceAccountCredsJsonString);
+      // Ensure private_key newlines are correctly formatted
+      if (credentials && credentials.private_key) {
+        credentials.private_key = credentials.private_key.replace(/\\n/g, '\n');
+      }
+    } catch (error: any) {
+      console.error('Failed to parse Google Service Account credentials JSON:', error.message);
+      return { success: false, message: `Invalid Google Service Account credentials JSON format: ${error.message}` };
+    }
+
+    if (!credentials || !credentials.client_email || !credentials.private_key) {
+        return { success: false, message: 'Parsed Google Service Account credentials missing required fields (client_email or private_key).' };
     }
 
     try {
@@ -61,8 +69,6 @@ const saveToGoogleSheetFlow = ai.defineFlow(
 
       const sheets = google.sheets({ version: 'v4', auth });
 
-      // Define the order of columns (header row)
-      // This should match the order in which you want data to appear in the sheet
       const headerRow = [
         'Classe',
         'Cours',
@@ -74,8 +80,6 @@ const saveToGoogleSheetFlow = ai.defineFlow(
         'Présences (JSON)',
       ];
 
-      // Map the input data to an array of values in the order of the headerRow
-      // Ensure all keys from ExtractedPdfData are handled here.
       const values = [
         data.classe ?? "",
         data.cours ?? "",
@@ -84,32 +88,28 @@ const saveToGoogleSheetFlow = ai.defineFlow(
         data.nombre_des_présents ?? 0,
         data.salle_n ?? "",
         data.séance ?? "",
-        JSON.stringify(data.présences ?? []), // Stringify the 'présences' array
+        JSON.stringify(data.présences ?? []),
       ];
 
-      // Check if header exists, if not, add it.
-      // For simplicity, we'll assume the sheet might be empty or we always append.
-      // A more robust solution would check for the header and add it if missing.
-      // Let's try to get the first row to see if it's a header.
       let sheetNeedsHeader = true;
       try {
         const headerCheck = await sheets.spreadsheets.values.get({
             spreadsheetId,
-            range: 'Sheet1!A1:H1', // Adjust range based on number of columns
+            range: 'Sheet1!A1:H1', 
         });
         if (headerCheck.data.values && headerCheck.data.values.length > 0) {
-            // Basic check if first row looks like our header
             if (JSON.stringify(headerCheck.data.values[0]) === JSON.stringify(headerRow)) {
                  sheetNeedsHeader = false;
             }
         }
       } catch (getHeaderError: any) {
-          if (getHeaderError.message.includes("Unable to parse range")) {
-              // Likely an empty sheet, so header is needed.
+          if (getHeaderError.message && getHeaderError.message.includes("Unable to parse range")) {
+              sheetNeedsHeader = true;
+          } else if (getHeaderError.response && getHeaderError.response.data && getHeaderError.response.data.error && getHeaderError.response.data.error.message.includes("Requested entity was not found")) {
+              // This means the sheet exists but is empty or the range doesn't exist.
               sheetNeedsHeader = true;
           } else {
-            console.warn("Could not check for header:", getHeaderError.message);
-            // Proceed cautiously, perhaps header is needed.
+            console.warn("Could not definitively check for header due to an error, proceeding as if header might be needed. Error:", getHeaderError.message);
           }
       }
       
@@ -119,11 +119,10 @@ const saveToGoogleSheetFlow = ai.defineFlow(
       }
       rowsToAppend.push(values);
 
-
       const response = await sheets.spreadsheets.values.append({
         spreadsheetId,
-        range: 'Sheet1!A1', // Start appending from cell A1 of 'Sheet1'
-        valueInputOption: 'USER_ENTERED', // Data is parsed as if the user typed it into the UI.
+        range: 'Sheet1!A1', 
+        valueInputOption: 'USER_ENTERED', 
         insertDataOption: 'INSERT_ROWS', 
         requestBody: {
           values: rowsToAppend,
@@ -138,7 +137,7 @@ const saveToGoogleSheetFlow = ai.defineFlow(
         updatedRange: response.data.updates?.updatedRange,
       };
     } catch (error: any) {
-      console.error('Error saving to Google Sheet:', error);
+      console.error('Error saving to Google Sheet:', error.message, error.stack, error.response?.data?.error);
       let errorMessage = `Failed to save to Google Sheet: ${error.message}`;
       if (error.response?.data?.error?.message) {
         errorMessage += ` Google API Error: ${error.response.data.error.message}`;
@@ -147,3 +146,4 @@ const saveToGoogleSheetFlow = ai.defineFlow(
     }
   }
 );
+
