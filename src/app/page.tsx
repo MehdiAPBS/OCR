@@ -2,6 +2,7 @@
 "use client";
 
 import { useState, useEffect, type ChangeEvent } from 'react';
+import Image from 'next/image'; // Import next/image
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
@@ -21,20 +22,20 @@ type ExtractionEngine = ExtractDataFromPdfInput['extractionEngine'];
 interface ProcessedPdfEntry {
   file: File;
   pdfData: ExtractedPdfData | null;
-  documentInstanceId: string; 
+  documentInstanceId: string;
 }
 
 export default function PdfExtractorPage() {
   const [processedEntries, setProcessedEntries] = useState<ProcessedPdfEntry[]>([]);
   const [currentPdfIndex, setCurrentPdfIndex] = useState<number>(0);
-  
+
   const [pdfObjectUrl, setPdfObjectUrl] = useState<string | null>(null);
   const [pdfDataUri, setPdfDataUri] = useState<string | null>(null);
-  
+
   const [currentExtractedData, setCurrentExtractedData] = useState<ExtractedPdfData | null>(null);
 
   const [extractionEngine, setExtractionEngine] = useState<ExtractionEngine>('genkitDirect');
-  
+
   const [isLoading, setIsLoading] = useState<boolean>(false);
   const [isSavingToMongoDb, setIsSavingToMongoDb] = useState<boolean>(false);
   const [isSavingToSheet, setIsSavingToSheet] = useState<boolean>(false);
@@ -52,23 +53,23 @@ export default function PdfExtractorPage() {
   }, [pdfObjectUrl]);
 
   const loadPdfAtIndex = (index: number, entries: ProcessedPdfEntry[] = processedEntries) => {
-    if (pdfObjectUrl) { 
+    if (pdfObjectUrl) {
       URL.revokeObjectURL(pdfObjectUrl);
-      setPdfObjectUrl(null); 
+      setPdfObjectUrl(null);
     }
-    
+
     if (entries.length === 0 && index === 0) {
       setPdfDataUri(null);
       setCurrentExtractedData(null);
       setError(null);
       return;
     }
-  
+
     if (index >= 0 && index < entries.length) {
       const entry = entries[index];
       const newObjectUrl = URL.createObjectURL(entry.file);
       setPdfObjectUrl(newObjectUrl);
-  
+
       const reader = new FileReader();
       reader.onloadend = () => {
         setPdfDataUri(reader.result as string);
@@ -78,9 +79,9 @@ export default function PdfExtractorPage() {
         setPdfDataUri(null);
       }
       reader.readAsDataURL(entry.file);
-  
-      setCurrentExtractedData(entry.pdfData || null); 
-      setError(null); 
+
+      setCurrentExtractedData(entry.pdfData || null);
+      setError(null);
     } else {
       setPdfDataUri(null);
       setCurrentExtractedData(null);
@@ -96,11 +97,11 @@ export default function PdfExtractorPage() {
 
   const advanceToNextPdf = () => {
     const newIndex = currentPdfIndex + 1;
-    setCurrentPdfIndex(newIndex); 
+    setCurrentPdfIndex(newIndex);
     if (newIndex < processedEntries.length) {
       loadPdfAtIndex(newIndex, processedEntries);
     } else {
-      loadPdfAtIndex(newIndex, processedEntries); 
+      loadPdfAtIndex(newIndex, processedEntries);
       toast({
         title: "Queue Finished",
         description: "All PDFs in the queue have been processed and saved (or viewed).",
@@ -136,7 +137,7 @@ export default function PdfExtractorPage() {
       setError(null);
     }
     if (event.target) {
-        event.target.value = ''; 
+        event.target.value = '';
     }
   };
 
@@ -153,7 +154,8 @@ export default function PdfExtractorPage() {
 
     setIsLoading(true);
     setError(null);
-    setCurrentExtractedData(null); 
+    // Don't reset currentExtractedData here if we want to keep showing old data until new is loaded
+    // setCurrentExtractedData(null);
 
     try {
       const inputArgs: ExtractDataFromPdfInput = { pdfDataUri, extractionEngine };
@@ -163,6 +165,7 @@ export default function PdfExtractorPage() {
         console.error("Error from AI flow:", result.error, "Full result object:", result);
         const displayError = `AI Flow Error: ${result.error}`;
         setError(displayError);
+        // Keep showing potentially existing data for this PDF
         setCurrentExtractedData(processedEntries[currentPdfIndex]?.pdfData || null);
         toast({
           title: "Extraction Failed",
@@ -172,14 +175,19 @@ export default function PdfExtractorPage() {
         setIsLoading(false);
         return;
       }
-      
+
       if (result && result.jsonOutput && result.jsonOutput.trim() !== '' && result.jsonOutput.trim() !== '{}') {
         try {
           const parsedData: ExtractedPdfData = JSON.parse(result.jsonOutput);
           setCurrentExtractedData(parsedData);
           setProcessedEntries(prevEntries => {
             const newEntries = [...prevEntries];
-            newEntries[currentPdfIndex] = { ...newEntries[currentPdfIndex], pdfData: parsedData };
+            if (newEntries[currentPdfIndex]) {
+                 newEntries[currentPdfIndex] = { ...newEntries[currentPdfIndex], pdfData: parsedData };
+            } else {
+                // This case should ideally not happen if currentPdfIndex is always valid
+                console.warn("currentPdfIndex might be out of bounds when setting processed data");
+            }
             return newEntries;
           });
           toast({
@@ -209,26 +217,30 @@ export default function PdfExtractorPage() {
         console.warn("Problematic AI Result:", errorMessage, "Full result object:", result);
         setError(errorMessage);
         try {
+          // Attempt to parse even if it's default data, to store the defaults
           const parsedData: ExtractedPdfData | null = result && result.jsonOutput ? JSON.parse(result.jsonOutput) : null;
-          setCurrentExtractedData(parsedData); 
+          setCurrentExtractedData(parsedData);
           setProcessedEntries(prevEntries => {
             const newEntries = [...prevEntries];
-            newEntries[currentPdfIndex] = { ...newEntries[currentPdfIndex], pdfData: parsedData };
+             if (newEntries[currentPdfIndex]) {
+                newEntries[currentPdfIndex] = { ...newEntries[currentPdfIndex], pdfData: parsedData };
+            }
             return newEntries;
           });
-           if (parsedData) {
+           if (parsedData) { // If we successfully parsed (even default data)
             toast({
               title: "Extraction Note",
               description: "AI processed the PDF but returned default/empty values for some or all fields. Data is shown for review.",
-              variant: "default" 
+              variant: "default"
             });
           }
         } catch (e) {
           console.error("Error parsing even default AI output:", e, "Raw output:", result?.jsonOutput);
+          // Fallback to any previously existing data for this PDF
           setCurrentExtractedData(processedEntries[currentPdfIndex]?.pdfData || null);
         }
       }
-    } catch (err: any) { 
+    } catch (err: any) {
       console.error("Error processing PDF in client:", err);
       const errorMessage = err.message || "An unknown error occurred during PDF processing.";
       setError(errorMessage);
@@ -321,7 +333,7 @@ export default function PdfExtractorPage() {
           title: "Saved to MongoDB",
           description: `${result.message} (ID: ${result.recordId || 'N/A'}) for ${currentEntry?.file.name || 'current PDF'}.`,
         });
-        advanceToNextPdf(); 
+        advanceToNextPdf();
       } else {
         toast({
           title: "MongoDB Save Failed",
@@ -365,7 +377,7 @@ export default function PdfExtractorPage() {
           title: "Saved to Google Sheet",
           description: `${result.message} for ${currentEntry?.file.name || 'current PDF'}.`,
         });
-        advanceToNextPdf(); 
+        advanceToNextPdf();
       } else {
         toast({
           title: "Google Sheet Save Failed",
@@ -399,8 +411,9 @@ export default function PdfExtractorPage() {
       setCurrentPdfIndex(newIndex);
       loadPdfAtIndex(newIndex, processedEntries);
     } else if (currentPdfIndex === processedEntries.length - 1 && processedEntries.length > 0) {
+      // If on the last PDF, "Next" can mean going to the "end of queue" state
       setCurrentPdfIndex(processedEntries.length);
-      loadPdfAtIndex(processedEntries.length, processedEntries);
+      loadPdfAtIndex(processedEntries.length, processedEntries); // This will trigger the "All PDFs Processed" message
     }
   };
 
@@ -409,19 +422,30 @@ export default function PdfExtractorPage() {
   const isAnyOperationInProgress = isLoading || isAnySavingInProgress;
 
   const processPdfDisabled = isAnyOperationInProgress || !canProcess;
-  const actionButtonsDisabled = !currentExtractedData || isAnyOperationInProgress; 
+  const actionButtonsDisabled = !currentExtractedData || isAnyOperationInProgress;
   const prevButtonDisabled = currentPdfIndex === 0 || isAnyOperationInProgress || processedEntries.length === 0;
-  const nextButtonDisabled = currentPdfIndex >= processedEntries.length - 1 || isAnyOperationInProgress || processedEntries.length === 0;
+  const nextButtonDisabled = currentPdfIndex >= processedEntries.length -1 || isAnyOperationInProgress || processedEntries.length === 0;
+
 
   const currentFile = processedEntries[currentPdfIndex]?.file;
 
   return (
     <div className="flex flex-col min-h-screen bg-background p-4 md:p-8 selection:bg-primary/20">
-      <header className="mb-8">
-        <h1 className="text-4xl font-bold text-center text-primary tracking-tight">
-          PDF Data Extractor
-        </h1>
-        <p className="text-center text-muted-foreground mt-2 text-lg">
+      <header className="mb-8 flex flex-col items-center">
+        <div className="flex items-center gap-4 mb-2">
+          <Image
+            src="https://placehold.co/64x64.png"
+            alt="Polygon University Logo"
+            width={64}
+            height={64}
+            data-ai-hint="polygon university gold logo"
+            className="rounded-sm"
+          />
+          <h1 className="text-4xl font-bold text-primary tracking-tight">
+            PDF Data Extractor
+          </h1>
+        </div>
+        <p className="text-center text-muted-foreground text-lg">
           Upload PDF(s), extract data using AI, edit, and save.
         </p>
       </header>
@@ -456,7 +480,7 @@ export default function PdfExtractorPage() {
                   </Button>
                 <p className="text-sm text-muted-foreground truncate max-w-xs" title={currentFile?.name}>
                   {currentPdfIndex < processedEntries.length ? (
-                    <>Current file: <span className="font-medium text-foreground">{currentFile?.name}</span> ({currentPdfIndex + 1} of {processedEntries.length})</>
+                    <>Current: <span className="font-medium text-foreground">{currentFile?.name}</span> ({currentPdfIndex + 1} of {processedEntries.length})</>
                   ) : (
                      processedEntries.length > 0 ? <span className="text-green-600 font-medium">All {processedEntries.length} PDFs viewed. Queue finished.</span> : "No PDFs in queue."
                   )}
@@ -488,18 +512,18 @@ export default function PdfExtractorPage() {
               onValueChange={(value: string) => setExtractionEngine(value as ExtractionEngine)}
               className="flex flex-col sm:flex-row gap-2 sm:gap-4"
             >
-              <div className="flex items-center space-x-2 p-3 border rounded-md hover:bg-accent/50 transition-colors cursor-pointer has-[[data-state=checked]]:bg-primary/10 has-[[data-state=checked]]:border-primary">
+              <div className="flex items-center space-x-2 p-3 border rounded-md hover:bg-accent/10 transition-colors cursor-pointer has-[[data-state=checked]]:bg-primary/10 has-[[data-state=checked]]:border-primary">
                 <RadioGroupItem value="genkitDirect" id="genkitDirect" />
                 <Label htmlFor="genkitDirect" className="font-normal text-sm cursor-pointer">Genkit Direct AI</Label>
               </div>
-              <div className="flex items-center space-x-2 p-3 border rounded-md hover:bg-accent/50 transition-colors cursor-pointer has-[[data-state=checked]]:bg-primary/10 has-[[data-state=checked]]:border-primary">
+              <div className="flex items-center space-x-2 p-3 border rounded-md hover:bg-accent/10 transition-colors cursor-pointer has-[[data-state=checked]]:bg-primary/10 has-[[data-state=checked]]:border-primary">
                 <RadioGroupItem value="googleCloudVision" id="googleCloudVision" />
                 <Label htmlFor="googleCloudVision" className="font-normal text-sm cursor-pointer">Google Cloud Vision OCR + AI</Label>
               </div>
             </RadioGroup>
           </div>
         </div>
-         <div className="mt-6 flex flex-col md:flex-row gap-3 items-center">
+         <div className="mt-6 flex flex-col md:flex-row gap-3 items-center flex-wrap">
             <Button
                 onClick={handleProcessPdf}
                 disabled={processPdfDisabled}
@@ -513,7 +537,7 @@ export default function PdfExtractorPage() {
                 )}
                 {isLoading ? "Processing..." : (canProcess ? `Process PDF ${currentPdfIndex + 1}` : "Process PDF")}
               </Button>
-            {currentExtractedData && ( 
+            {currentExtractedData && (
              <>
                 <Button
                     onClick={handleDownloadJson}
@@ -539,7 +563,7 @@ export default function PdfExtractorPage() {
                     )}
                     {isSavingToMongoDb ? "Saving..." : "Save to DB"}
                 </Button>
-                <Button 
+                <Button
                     onClick={handleSaveToSheet}
                     disabled={actionButtonsDisabled}
                     variant="outline"
@@ -566,13 +590,16 @@ export default function PdfExtractorPage() {
       </div>
 
       <main className="flex-grow grid grid-cols-1 lg:grid-cols-2 gap-6 lg:gap-8">
-        <section className="h-[calc(100vh-320px)] min-h-[500px] rounded-xl overflow-hidden border border-border">
+        <section className="h-[calc(100vh-350px)] min-h-[450px] rounded-xl overflow-hidden border border-border bg-card">
           <PdfViewer pdfUrl={pdfObjectUrl} />
         </section>
-        <section className="h-[calc(100vh-320px)] min-h-[500px] rounded-xl overflow-hidden border border-border">
+        <section className="h-[calc(100vh-350px)] min-h-[450px] rounded-xl overflow-hidden border border-border bg-card">
           <DataEditor data={currentExtractedData} onDataChange={handleDataChange} />
         </section>
       </main>
+      <footer className="mt-12 py-6 text-center text-muted-foreground text-sm">
+        <p>© Copyright reserved to Polygon University</p>
+      </footer>
     </div>
   );
 }
