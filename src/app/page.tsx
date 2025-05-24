@@ -414,7 +414,7 @@ export default function PdfExtractorPage() {
       <header className="mb-8 flex flex-col sm:flex-row items-center justify-between">
         <div className="flex items-center gap-4 mb-4 sm:mb-0">
           <Image
-            src="https://i.ibb.co/DDRC4Mm/logo.png"
+            src="https://ibb.co/jvKDhR5q"
             alt="Polygon University Logo"
             width={64}
             height={64}
