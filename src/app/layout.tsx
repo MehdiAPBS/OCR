@@ -1,7 +1,9 @@
+
 import type {Metadata} from 'next';
 import { Reem_Kufi } from 'next/font/google'; // Import Reem_Kufi
 import './globals.css';
 import { Toaster } from "@/components/ui/toaster";
+import { ThemeProvider } from "@/components/theme-provider";
 
 // Load Reem Kufi font with specified weights
 const reemKufi = Reem_Kufi({
@@ -21,11 +23,18 @@ export default function RootLayout({
   children: React.ReactNode;
 }>) {
   return (
-    <html lang="en">
+    <html lang="en" suppressHydrationWarning>
       {/* Apply the font variable to the body */}
       <body className={`${reemKufi.variable} font-sans antialiased`}>
-        {children}
-        <Toaster />
+        <ThemeProvider
+            attribute="class"
+            defaultTheme="light"
+            enableSystem={false} // Disable system theme preference for explicit toggle
+            disableTransitionOnChange
+          >
+          {children}
+          <Toaster />
+        </ThemeProvider>
       </body>
     </html>
   );

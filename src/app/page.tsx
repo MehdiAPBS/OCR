@@ -2,7 +2,7 @@
 "use client";
 
 import { useState, useEffect, type ChangeEvent } from 'react';
-import Image from 'next/image'; // Import next/image
+import Image from 'next/image';
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
@@ -16,6 +16,8 @@ import type { ExtractedPdfData } from "@/ai/schemas/pdf-data-schema";
 import { useToast } from "@/hooks/use-toast";
 import { Cpu, FileJson, Loader2, AlertTriangle, Database, Sheet as SheetIcon, Settings2, ArrowLeft, ArrowRight } from 'lucide-react';
 import { v4 as uuidv4 } from 'uuid';
+import { ThemeToggleButton } from '@/components/theme-toggle-button';
+
 
 type ExtractionEngine = ExtractDataFromPdfInput['extractionEngine'];
 
@@ -28,6 +30,8 @@ interface ProcessedPdfEntry {
 export default function PdfExtractorPage() {
   const [processedEntries, setProcessedEntries] = useState<ProcessedPdfEntry[]>([]);
   const [currentPdfIndex, setCurrentPdfIndex] = useState<number>(0);
+  const [allProcessedData, setAllProcessedData] = useState<(ExtractedPdfData | null)[]>([]);
+
 
   const [pdfObjectUrl, setPdfObjectUrl] = useState<string | null>(null);
   const [pdfDataUri, setPdfDataUri] = useState<string | null>(null);
@@ -52,7 +56,7 @@ export default function PdfExtractorPage() {
     };
   }, [pdfObjectUrl]);
 
-  const loadPdfAtIndex = (index: number, entries: ProcessedPdfEntry[] = processedEntries) => {
+  const loadPdfAtIndex = (index: number, entries: ProcessedPdfEntry[] = processedEntries, data: (ExtractedPdfData | null)[] = allProcessedData) => {
     if (pdfObjectUrl) {
       URL.revokeObjectURL(pdfObjectUrl);
       setPdfObjectUrl(null);
@@ -80,7 +84,7 @@ export default function PdfExtractorPage() {
       }
       reader.readAsDataURL(entry.file);
 
-      setCurrentExtractedData(entry.pdfData || null);
+      setCurrentExtractedData(data[index] || null);
       setError(null);
     } else {
       setPdfDataUri(null);
@@ -99,9 +103,9 @@ export default function PdfExtractorPage() {
     const newIndex = currentPdfIndex + 1;
     setCurrentPdfIndex(newIndex);
     if (newIndex < processedEntries.length) {
-      loadPdfAtIndex(newIndex, processedEntries);
+      loadPdfAtIndex(newIndex, processedEntries, allProcessedData);
     } else {
-      loadPdfAtIndex(newIndex, processedEntries);
+      loadPdfAtIndex(newIndex, processedEntries, allProcessedData); // Will show end of queue message
       toast({
         title: "Queue Finished",
         description: "All PDFs in the queue have been processed and saved (or viewed).",
@@ -116,28 +120,32 @@ export default function PdfExtractorPage() {
       if (newPdfFiles.length > 0) {
         const newEntries: ProcessedPdfEntry[] = newPdfFiles.map(file => ({
           file,
-          pdfData: null,
+          pdfData: null, // pdfData will be populated by allProcessedData
           documentInstanceId: uuidv4(),
         }));
+        const newAllData = new Array(newPdfFiles.length).fill(null);
         setProcessedEntries(newEntries);
+        setAllProcessedData(newAllData);
         setCurrentPdfIndex(0);
-        loadPdfAtIndex(0, newEntries);
+        loadPdfAtIndex(0, newEntries, newAllData);
         setError(null);
       } else {
         setProcessedEntries([]);
+        setAllProcessedData([]);
         setCurrentPdfIndex(0);
-        loadPdfAtIndex(0, []);
+        loadPdfAtIndex(0, [], []);
         setError("Please select valid PDF files.");
         toast({ title: "Invalid Files", description: "No valid PDF files were selected.", variant: "destructive" });
       }
     } else {
       setProcessedEntries([]);
+      setAllProcessedData([]);
       setCurrentPdfIndex(0);
-      loadPdfAtIndex(0, []);
+      loadPdfAtIndex(0, [], []);
       setError(null);
     }
     if (event.target) {
-        event.target.value = '';
+        event.target.value = ''; // Reset file input
     }
   };
 
@@ -154,8 +162,6 @@ export default function PdfExtractorPage() {
 
     setIsLoading(true);
     setError(null);
-    // Don't reset currentExtractedData here if we want to keep showing old data until new is loaded
-    // setCurrentExtractedData(null);
 
     try {
       const inputArgs: ExtractDataFromPdfInput = { pdfDataUri, extractionEngine };
@@ -165,13 +171,8 @@ export default function PdfExtractorPage() {
         console.error("Error from AI flow:", result.error, "Full result object:", result);
         const displayError = `AI Flow Error: ${result.error}`;
         setError(displayError);
-        // Keep showing potentially existing data for this PDF
-        setCurrentExtractedData(processedEntries[currentPdfIndex]?.pdfData || null);
-        toast({
-          title: "Extraction Failed",
-          description: displayError,
-          variant: "destructive",
-        });
+        setCurrentExtractedData(allProcessedData[currentPdfIndex] || null);
+        toast({ title: "Extraction Failed", description: displayError, variant: "destructive" });
         setIsLoading(false);
         return;
       }
@@ -180,15 +181,10 @@ export default function PdfExtractorPage() {
         try {
           const parsedData: ExtractedPdfData = JSON.parse(result.jsonOutput);
           setCurrentExtractedData(parsedData);
-          setProcessedEntries(prevEntries => {
-            const newEntries = [...prevEntries];
-            if (newEntries[currentPdfIndex]) {
-                 newEntries[currentPdfIndex] = { ...newEntries[currentPdfIndex], pdfData: parsedData };
-            } else {
-                // This case should ideally not happen if currentPdfIndex is always valid
-                console.warn("currentPdfIndex might be out of bounds when setting processed data");
-            }
-            return newEntries;
+          setAllProcessedData(prevAllData => {
+            const newAllData = [...prevAllData];
+            newAllData[currentPdfIndex] = parsedData;
+            return newAllData;
           });
           toast({
             title: "Data Extracted",
@@ -198,36 +194,27 @@ export default function PdfExtractorPage() {
           console.error("Error parsing AI output as JSON:", parseError, "Raw output:", result.jsonOutput);
           const displayError = "Failed to parse AI output. The AI returned an unexpected format.";
           setError(displayError);
-          setCurrentExtractedData(processedEntries[currentPdfIndex]?.pdfData || null);
-          toast({
-            title: "Parsing Failed",
-            description: displayError,
-            variant: "destructive",
-          });
+          setCurrentExtractedData(allProcessedData[currentPdfIndex] || null);
+          toast({ title: "Parsing Failed", description: displayError, variant: "destructive" });
         }
       } else {
         let errorMessage = "AI did not return expected data format or returned empty/default data.";
-        if (!result) {
-            errorMessage = "No response from AI service.";
-        } else if (!result.jsonOutput) {
-            errorMessage = "AI response missing 'jsonOutput' field.";
-        } else if (result.jsonOutput.trim() === '' || result.jsonOutput.trim() === '{}') {
+         if (!result) errorMessage = "No response from AI service.";
+         else if (!result.jsonOutput) errorMessage = "AI response missing 'jsonOutput' field.";
+         else if (result.jsonOutput.trim() === '' || result.jsonOutput.trim() === '{}') {
             errorMessage = "AI returned empty/default data. Review PDF content or prompt if fields are unexpectedly empty.";
-        }
+         }
         console.warn("Problematic AI Result:", errorMessage, "Full result object:", result);
         setError(errorMessage);
         try {
-          // Attempt to parse even if it's default data, to store the defaults
           const parsedData: ExtractedPdfData | null = result && result.jsonOutput ? JSON.parse(result.jsonOutput) : null;
           setCurrentExtractedData(parsedData);
-          setProcessedEntries(prevEntries => {
-            const newEntries = [...prevEntries];
-             if (newEntries[currentPdfIndex]) {
-                newEntries[currentPdfIndex] = { ...newEntries[currentPdfIndex], pdfData: parsedData };
-            }
-            return newEntries;
+           setAllProcessedData(prevAllData => {
+            const newAllData = [...prevAllData];
+            newAllData[currentPdfIndex] = parsedData;
+            return newAllData;
           });
-           if (parsedData) { // If we successfully parsed (even default data)
+          if (parsedData) {
             toast({
               title: "Extraction Note",
               description: "AI processed the PDF but returned default/empty values for some or all fields. Data is shown for review.",
@@ -235,21 +222,16 @@ export default function PdfExtractorPage() {
             });
           }
         } catch (e) {
-          console.error("Error parsing even default AI output:", e, "Raw output:", result?.jsonOutput);
-          // Fallback to any previously existing data for this PDF
-          setCurrentExtractedData(processedEntries[currentPdfIndex]?.pdfData || null);
+           console.error("Error parsing even default AI output:", e, "Raw output:", result?.jsonOutput);
+           setCurrentExtractedData(allProcessedData[currentPdfIndex] || null);
         }
       }
     } catch (err: any) {
       console.error("Error processing PDF in client:", err);
       const errorMessage = err.message || "An unknown error occurred during PDF processing.";
       setError(errorMessage);
-      setCurrentExtractedData(processedEntries[currentPdfIndex]?.pdfData || null);
-      toast({
-        title: "Processing Error",
-        description: errorMessage,
-        variant: "destructive",
-      });
+      setCurrentExtractedData(allProcessedData[currentPdfIndex] || null);
+      toast({ title: "Processing Error", description: errorMessage, variant: "destructive" });
     } finally {
       setIsLoading(false);
     }
@@ -257,17 +239,17 @@ export default function PdfExtractorPage() {
 
   const handleDataChange = (updatedData: ExtractedPdfData) => {
     setCurrentExtractedData(updatedData);
-    setProcessedEntries(prevEntries => {
-      const newEntries = [...prevEntries];
-      if (newEntries[currentPdfIndex]) {
-        newEntries[currentPdfIndex] = { ...newEntries[currentPdfIndex], pdfData: updatedData };
+    setAllProcessedData(prevAllData => {
+      const newAllData = [...prevAllData];
+      if (currentPdfIndex >= 0 && currentPdfIndex < newAllData.length) {
+        newAllData[currentPdfIndex] = updatedData;
       }
-      return newEntries;
+      return newAllData;
     });
   };
 
   const handleDownloadJson = () => {
-    const dataToDownload = processedEntries[currentPdfIndex]?.pdfData;
+    const dataToDownload = allProcessedData[currentPdfIndex];
     if (!dataToDownload) {
       toast({
         title: "No Data",
@@ -305,7 +287,7 @@ export default function PdfExtractorPage() {
 
   const handleSaveToMongoDb = async () => {
     const currentEntry = processedEntries[currentPdfIndex];
-    const dataToSave = currentEntry?.pdfData;
+    const dataToSave = allProcessedData[currentPdfIndex];
 
     if (!dataToSave) {
       toast({
@@ -355,7 +337,7 @@ export default function PdfExtractorPage() {
 
   const handleSaveToSheet = async () => {
     const currentEntry = processedEntries[currentPdfIndex];
-    const dataToSave = currentEntry?.pdfData;
+    const dataToSave = allProcessedData[currentPdfIndex];
     const docInstanceId = currentEntry?.documentInstanceId;
 
     if (!dataToSave || !docInstanceId) {
@@ -401,7 +383,7 @@ export default function PdfExtractorPage() {
     if (currentPdfIndex > 0) {
       const newIndex = currentPdfIndex - 1;
       setCurrentPdfIndex(newIndex);
-      loadPdfAtIndex(newIndex, processedEntries);
+      loadPdfAtIndex(newIndex, processedEntries, allProcessedData);
     }
   };
 
@@ -409,11 +391,10 @@ export default function PdfExtractorPage() {
     if (currentPdfIndex < processedEntries.length - 1) {
       const newIndex = currentPdfIndex + 1;
       setCurrentPdfIndex(newIndex);
-      loadPdfAtIndex(newIndex, processedEntries);
+      loadPdfAtIndex(newIndex, processedEntries, allProcessedData);
     } else if (currentPdfIndex === processedEntries.length - 1 && processedEntries.length > 0) {
-      // If on the last PDF, "Next" can mean going to the "end of queue" state
       setCurrentPdfIndex(processedEntries.length);
-      loadPdfAtIndex(processedEntries.length, processedEntries); // This will trigger the "All PDFs Processed" message
+      loadPdfAtIndex(processedEntries.length, processedEntries, allProcessedData);
     }
   };
 
@@ -431,8 +412,8 @@ export default function PdfExtractorPage() {
 
   return (
     <div className="flex flex-col min-h-screen bg-background p-4 md:p-8 selection:bg-primary/20">
-      <header className="mb-8 flex flex-col items-center">
-        <div className="flex items-center gap-4 mb-2">
+      <header className="mb-8 flex flex-col sm:flex-row items-center justify-between">
+        <div className="flex items-center gap-4 mb-4 sm:mb-0">
           <Image
             src="https://placehold.co/64x64.png"
             alt="Polygon University Logo"
@@ -441,14 +422,18 @@ export default function PdfExtractorPage() {
             data-ai-hint="polygon university gold logo"
             className="rounded-sm"
           />
-          <h1 className="text-4xl font-bold text-primary tracking-tight">
+          <h1 className="text-3xl md:text-4xl font-bold text-primary tracking-tight">
             PDF Data Extractor
           </h1>
         </div>
-        <p className="text-center text-muted-foreground text-lg">
-          Upload PDF(s), extract data using AI, edit, and save.
-        </p>
+        <div className="flex items-center gap-2">
+          <ThemeToggleButton />
+        </div>
       </header>
+      <p className="text-center text-muted-foreground text-lg mb-8 -mt-4 sm:mt-0">
+          Upload PDF(s), extract data using AI, edit, and save.
+      </p>
+
 
       <div className="mb-8 p-6 bg-card rounded-xl shadow-xl border border-border">
         <div className="grid grid-cols-1 md:grid-cols-2 gap-6 items-start">
