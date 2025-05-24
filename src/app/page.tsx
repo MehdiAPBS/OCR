@@ -13,7 +13,7 @@ import { extractDataFromPdf, type ExtractDataFromPdfOutput, type ExtractDataFrom
 import { saveToGoogleSheet, type SaveToGoogleSheetOutput } from "@/ai/flows/save-to-google-sheet";
 import type { ExtractedPdfData } from "@/ai/schemas/pdf-data-schema";
 import { useToast } from "@/hooks/use-toast";
-import { UploadCloud, Cpu, FileJson, Loader2, AlertTriangle, Database, Sheet as SheetIcon, Settings2 } from 'lucide-react';
+import { Cpu, FileJson, Loader2, AlertTriangle, Database, Sheet as SheetIcon, Settings2, ArrowLeft, ArrowRight } from 'lucide-react';
 
 type ExtractionEngine = ExtractDataFromPdfInput['extractionEngine'];
 
@@ -55,7 +55,6 @@ export default function PdfExtractorPage() {
     if (index >= 0 && index < filesToLoad.length) {
       const file = filesToLoad[index];
       
-      // Revoke old object URL before creating a new one
       if (pdfObjectUrl) {
         URL.revokeObjectURL(pdfObjectUrl);
       }
@@ -68,10 +67,9 @@ export default function PdfExtractorPage() {
       };
       reader.readAsDataURL(file);
   
-      setExtractedData(null); // Reset for the new PDF
-      setError(null); // Clear previous errors
+      setExtractedData(null); 
+      setError(null); 
     } else {
-      // Reached end of queue or invalid index
       setPdfObjectUrl(null);
       setPdfDataUri(null);
       setExtractedData(null);
@@ -79,7 +77,7 @@ export default function PdfExtractorPage() {
       if (filesToLoad.length > 0 && index >= filesToLoad.length) {
         toast({
           title: "All PDFs Processed",
-          description: "You have processed all PDFs in the queue.",
+          description: "You have reached the end of the PDF queue.",
         });
       }
     }
@@ -91,9 +89,8 @@ export default function PdfExtractorPage() {
       setCurrentPdfIndex(newIndex);
       loadPdfAtIndex(newIndex, pdfFiles);
     } else {
-      // All PDFs processed
-      setCurrentPdfIndex(newIndex); // To indicate queue completion
-      loadPdfAtIndex(newIndex, pdfFiles); // This will show "All PDFs Processed" toast
+      setCurrentPdfIndex(newIndex); 
+      loadPdfAtIndex(newIndex, pdfFiles); 
       toast({
         title: "Queue Finished",
         description: "All PDFs in the queue have been processed and saved.",
@@ -124,7 +121,6 @@ export default function PdfExtractorPage() {
       loadPdfAtIndex(0, []);
       setError(null);
     }
-     // Reset input value to allow re-uploading the same file(s)
     if (event.target) {
         event.target.value = '';
     }
@@ -290,7 +286,7 @@ export default function PdfExtractorPage() {
           title: "Saved to MongoDB",
           description: `${result.message} (ID: ${result.recordId || 'N/A'}) for ${pdfFiles[currentPdfIndex]?.name || 'current PDF'}.`,
         });
-        advanceToNextPdf(); // Advance on successful save
+        advanceToNextPdf(); 
       } else {
         toast({
           title: "MongoDB Save Failed",
@@ -328,7 +324,7 @@ export default function PdfExtractorPage() {
           title: "Saved to Google Sheet",
           description: `${result.message} for ${pdfFiles[currentPdfIndex]?.name || 'current PDF'}.`,
         });
-        advanceToNextPdf(); // Advance on successful save
+        advanceToNextPdf(); 
       } else {
         toast({
           title: "Google Sheet Save Failed",
@@ -348,10 +344,37 @@ export default function PdfExtractorPage() {
     }
   };
 
+  const handlePreviousPdf = () => {
+    if (currentPdfIndex > 0) {
+      setCurrentPdfIndex(prevIndex => {
+        const newIndex = prevIndex - 1;
+        loadPdfAtIndex(newIndex);
+        return newIndex;
+      });
+    }
+  };
+
+  const handleNextPdf = () => {
+    if (currentPdfIndex < pdfFiles.length - 1) {
+      setCurrentPdfIndex(prevIndex => {
+        const newIndex = prevIndex + 1;
+        loadPdfAtIndex(newIndex);
+        return newIndex;
+      });
+    } else if (currentPdfIndex === pdfFiles.length - 1) {
+      // If on the last PDF, calling loadPdfAtIndex for pdfFiles.length will trigger "All PDFs Processed"
+      loadPdfAtIndex(pdfFiles.length);
+    }
+  };
+
   const canProcess = pdfFiles.length > 0 && currentPdfIndex < pdfFiles.length;
   const isAnySavingInProgress = isSavingToMongoDb || isSavingToSheet;
-  const processPdfDisabled = isLoading || !canProcess || isAnySavingInProgress;
-  const actionButtonsDisabled = !extractedData || isLoading || isAnySavingInProgress;
+  const isAnyOperationInProgress = isLoading || isAnySavingInProgress;
+
+  const processPdfDisabled = isAnyOperationInProgress || !canProcess;
+  const actionButtonsDisabled = !extractedData || isAnyOperationInProgress;
+  const prevButtonDisabled = currentPdfIndex === 0 || isAnyOperationInProgress || pdfFiles.length === 0;
+  const nextButtonDisabled = currentPdfIndex >= pdfFiles.length - 1 || isAnyOperationInProgress || pdfFiles.length === 0;
 
 
   return (
@@ -382,15 +405,34 @@ export default function PdfExtractorPage() {
                 aria-label="Upload PDF Documents"
               />
             </div>
-            {pdfFiles.length > 0 && currentPdfIndex < pdfFiles.length && (
-              <p className="mt-3 text-sm text-muted-foreground">
-                Current file: <span className="font-medium text-foreground">{pdfFiles[currentPdfIndex].name}</span> ({currentPdfIndex + 1} of {pdfFiles.length})
-              </p>
-            )}
-            {pdfFiles.length > 0 && currentPdfIndex >= pdfFiles.length && (
-                <p className="mt-3 text-sm text-green-600 font-medium">
-                    All {pdfFiles.length} PDFs processed! Upload new files to start again.
+            {pdfFiles.length > 0 && (
+              <div className="mt-3 flex items-center gap-2">
+                 <Button
+                    onClick={handlePreviousPdf}
+                    disabled={prevButtonDisabled}
+                    variant="outline"
+                    size="icon"
+                    aria-label="Previous PDF"
+                  >
+                    <ArrowLeft className="h-5 w-5" />
+                  </Button>
+                <p className="text-sm text-muted-foreground">
+                  {currentPdfIndex < pdfFiles.length ? (
+                    <>Current file: <span className="font-medium text-foreground">{pdfFiles[currentPdfIndex].name}</span> ({currentPdfIndex + 1} of {pdfFiles.length})</>
+                  ) : (
+                    <span className="text-green-600 font-medium">All {pdfFiles.length} PDFs viewed.</span>
+                  )}
                 </p>
+                 <Button
+                    onClick={handleNextPdf}
+                    disabled={nextButtonDisabled}
+                    variant="outline"
+                    size="icon"
+                    aria-label="Next PDF"
+                  >
+                    <ArrowRight className="h-5 w-5" />
+                  </Button>
+              </div>
             )}
             {pdfFiles.length === 0 && (
               <p className="mt-3 text-sm text-muted-foreground">
