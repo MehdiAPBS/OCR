@@ -6,13 +6,16 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Label } from "@/components/ui/label";
+import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 import PdfViewer from "@/components/pdf-viewer";
 import DataEditor from "@/components/data-editor";
-import { extractDataFromPdf, type ExtractDataFromPdfOutput } from "@/ai/flows/extract-data-from-pdf";
+import { extractDataFromPdf, type ExtractDataFromPdfOutput, type ExtractDataFromPdfInput } from "@/ai/flows/extract-data-from-pdf";
 import { saveToGoogleSheet, type SaveToGoogleSheetOutput } from "@/ai/flows/save-to-google-sheet";
 import type { ExtractedPdfData } from "@/ai/schemas/pdf-data-schema";
 import { useToast } from "@/hooks/use-toast";
-import { UploadCloud, Cpu, FileJson, Loader2, AlertTriangle, Database, Sheet as SheetIcon } from 'lucide-react';
+import { UploadCloud, Cpu, FileJson, Loader2, AlertTriangle, Database, Sheet as SheetIcon, Settings2 } from 'lucide-react';
+
+type ExtractionEngine = ExtractDataFromPdfInput['extractionEngine'];
 
 export default function PdfExtractorPage() {
   const [pdfFile, setPdfFile] = useState<File | null>(null);
@@ -20,6 +23,7 @@ export default function PdfExtractorPage() {
   const [pdfDataUri, setPdfDataUri] = useState<string | null>(null);
   
   const [extractedData, setExtractedData] = useState<ExtractedPdfData | null>(null);
+  const [extractionEngine, setExtractionEngine] = useState<ExtractionEngine>('genkitDirect');
   
   const [isLoading, setIsLoading] = useState<boolean>(false);
   const [isSavingToMongoDb, setIsSavingToMongoDb] = useState<boolean>(false);
@@ -84,7 +88,8 @@ export default function PdfExtractorPage() {
     setExtractedData(null); 
 
     try {
-      const result: ExtractDataFromPdfOutput = await extractDataFromPdf({ pdfDataUri });
+      const inputArgs: ExtractDataFromPdfInput = { pdfDataUri, extractionEngine };
+      const result: ExtractDataFromPdfOutput = await extractDataFromPdf(inputArgs);
 
       if (result && result.error) {
         console.error("Error from AI flow:", result.error, "Full result object:", result);
@@ -131,9 +136,10 @@ export default function PdfExtractorPage() {
         console.warn("Problematic AI Result:", errorMessage, "Full result object:", result);
         setError(errorMessage);
         try {
+          // Attempt to parse even if it might be default/empty data, to show it in the editor.
           const parsedData: ExtractedPdfData = result && result.jsonOutput ? JSON.parse(result.jsonOutput) : null;
           setExtractedData(parsedData); 
-           if (parsedData) {
+           if (parsedData) { // Show a less severe toast if we at least got parseable (even if default) data.
             toast({
               title: "Extraction Note",
               description: "AI processed the PDF but returned default/empty values for some or all fields. Data is shown for review.",
@@ -142,7 +148,7 @@ export default function PdfExtractorPage() {
           }
         } catch (e) {
           console.error("Error parsing even default AI output:", e, "Raw output:", result?.jsonOutput);
-          setExtractedData(null); 
+          setExtractedData(null); // Ensure data is null if final parsing attempt fails.
         }
       }
     } catch (err: any) { 
@@ -309,10 +315,39 @@ export default function PdfExtractorPage() {
                 className="flex-grow file:mr-4 file:py-2 file:px-4 file:rounded-full file:border-0 file:text-sm file:font-semibold file:bg-primary/10 file:text-primary hover:file:bg-primary/20 cursor-pointer"
                 aria-label="Upload PDF Document"
               />
-              <Button
+            </div>
+             {pdfFile && (
+              <p className="mt-3 text-sm text-muted-foreground">
+                Selected file: <span className="font-medium text-foreground">{pdfFile.name}</span>
+              </p>
+            )}
+          </div>
+          <div className="space-y-3">
+            <Label className="text-lg font-medium mb-2 block text-foreground">
+              <Settings2 className="inline-block mr-2 h-5 w-5 text-primary" />
+              Extraction Engine
+            </Label>
+            <RadioGroup
+              value={extractionEngine}
+              onValueChange={(value: string) => setExtractionEngine(value as ExtractionEngine)}
+              className="flex flex-col sm:flex-row gap-2 sm:gap-4"
+            >
+              <div className="flex items-center space-x-2 p-3 border rounded-md hover:bg-accent/50 transition-colors cursor-pointer has-[[data-state=checked]]:bg-primary/10 has-[[data-state=checked]]:border-primary">
+                <RadioGroupItem value="genkitDirect" id="genkitDirect" />
+                <Label htmlFor="genkitDirect" className="font-normal text-sm cursor-pointer">Genkit Direct AI</Label>
+              </div>
+              <div className="flex items-center space-x-2 p-3 border rounded-md hover:bg-accent/50 transition-colors cursor-pointer has-[[data-state=checked]]:bg-primary/10 has-[[data-state=checked]]:border-primary">
+                <RadioGroupItem value="googleCloudVision" id="googleCloudVision" />
+                <Label htmlFor="googleCloudVision" className="font-normal text-sm cursor-pointer">Google Cloud Vision OCR + AI</Label>
+              </div>
+            </RadioGroup>
+          </div>
+        </div>
+         <div className="mt-6 flex flex-col md:flex-row gap-3 items-center">
+            <Button
                 onClick={handleProcessPdf}
                 disabled={isLoading || !pdfFile || isSavingToMongoDb || isSavingToSheet}
-                className="bg-accent hover:bg-accent/90 text-accent-foreground min-w-[150px] transition-all duration-150 ease-in-out transform active:scale-95"
+                className="bg-accent hover:bg-accent/90 text-accent-foreground min-w-[150px] w-full md:w-auto transition-all duration-150 ease-in-out transform active:scale-95"
                 aria-label="Process PDF for data extraction"
               >
                 {isLoading ? (
@@ -322,20 +357,13 @@ export default function PdfExtractorPage() {
                 )}
                 {isLoading ? "Processing..." : "Process PDF"}
               </Button>
-            </div>
-             {pdfFile && (
-              <p className="mt-3 text-sm text-muted-foreground">
-                Selected file: <span className="font-medium text-foreground">{pdfFile.name}</span>
-              </p>
-            )}
-          </div>
-          {extractedData && (
-             <div className="flex flex-col md:flex-row md:items-center md:justify-end gap-3 mt-4 md:mt-0">
+            {extractedData && (
+             <>
                 <Button
                     onClick={handleDownloadJson}
                     disabled={!extractedData || isLoading || isSavingToMongoDb || isSavingToSheet}
                     variant="outline"
-                    className="border-primary text-primary hover:bg-primary/5 hover:text-primary min-w-[150px] transition-all duration-150 ease-in-out"
+                    className="border-primary text-primary hover:bg-primary/5 hover:text-primary min-w-[150px] w-full md:w-auto transition-all duration-150 ease-in-out"
                     aria-label="Download extracted data as JSON"
                 >
                     <FileJson className="mr-2 h-5 w-5" />
@@ -345,7 +373,7 @@ export default function PdfExtractorPage() {
                     onClick={handleSaveToMongoDb}
                     disabled={!extractedData || isLoading || isSavingToMongoDb || isSavingToSheet}
                     variant="outline"
-                    className="border-green-600 text-green-600 hover:bg-green-500/10 hover:text-green-700 min-w-[150px] transition-all duration-150 ease-in-out"
+                    className="border-green-600 text-green-600 hover:bg-green-500/10 hover:text-green-700 min-w-[150px] w-full md:w-auto transition-all duration-150 ease-in-out"
                     aria-label="Save extracted data to MongoDB"
                 >
                     {isSavingToMongoDb ? (
@@ -359,7 +387,7 @@ export default function PdfExtractorPage() {
                     onClick={handleSaveToSheet}
                     disabled={!extractedData || isLoading || isSavingToMongoDb || isSavingToSheet}
                     variant="outline"
-                    className="border-blue-500 text-blue-500 hover:bg-blue-500/10 hover:text-blue-600 min-w-[150px] transition-all duration-150 ease-in-out"
+                    className="border-blue-500 text-blue-500 hover:bg-blue-500/10 hover:text-blue-600 min-w-[150px] w-full md:w-auto transition-all duration-150 ease-in-out"
                     aria-label="Save extracted data to Google Sheet"
                 >
                     {isSavingToSheet ? (
@@ -369,7 +397,7 @@ export default function PdfExtractorPage() {
                     )}
                     {isSavingToSheet ? "Saving..." : "Save to Sheet"}
                 </Button>
-            </div>
+            </>
           )}
         </div>
         {error && (
@@ -382,10 +410,10 @@ export default function PdfExtractorPage() {
       </div>
 
       <main className="flex-grow grid grid-cols-1 lg:grid-cols-2 gap-6 lg:gap-8">
-        <section className="h-[calc(100vh-280px)] min-h-[500px] rounded-xl overflow-hidden border border-border">
+        <section className="h-[calc(100vh-320px)] min-h-[500px] rounded-xl overflow-hidden border border-border">
           <PdfViewer pdfUrl={pdfObjectUrl} />
         </section>
-        <section className="h-[calc(100vh-280px)] min-h-[500px] rounded-xl overflow-hidden border border-border">
+        <section className="h-[calc(100vh-320px)] min-h-[500px] rounded-xl overflow-hidden border border-border">
           <DataEditor data={extractedData} onDataChange={handleDataChange} />
         </section>
       </main>

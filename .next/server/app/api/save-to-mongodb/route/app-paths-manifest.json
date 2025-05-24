@@ -1,0 +1,3 @@
+{
+  "/api/save-to-mongodb/route": "app/api/save-to-mongodb/route.js"
+}
