@@ -3,48 +3,48 @@
 @tailwind utilities;
 
 body {
-  font-family: var(--font-geist-sans), Arial, Helvetica, sans-serif;
+  font-family: var(--font-reem-kufi), Arial, Helvetica, sans-serif; /* Use Reem Kufi */
 }
 
 @layer base {
-  :root {
-    --background: 0 0% 12%; /* Dark Gray, e.g., #1E1E1E */
-    --foreground: 0 0% 95%; /* Off-white for text */
-    --card: 0 0% 15%; /* Slightly lighter dark gray for cards */
-    --card-foreground: 0 0% 95%;
-    --popover: 0 0% 15%;
-    --popover-foreground: 0 0% 95%;
-    --primary: 45 85% 55%; /* Vibrant Gold */
-    --primary-foreground: 0 0% 10%; /* Dark text on gold buttons */
-    --secondary: 0 0% 20%; /* Another shade of gray */
-    --secondary-foreground: 0 0% 90%;
-    --muted: 0 0% 25%;
-    --muted-foreground: 0 0% 60%;
-    --accent: 45 75% 60%; /* Similar Gold, slightly different */
-    --accent-foreground: 0 0% 10%; /* Dark text on accent */
-    --destructive: 0 70% 50%; /* Dark theme friendly red */
-    --destructive-foreground: 0 0% 95%;
-    --border: 0 0% 25%; /* Subtle border for dark theme */
-    --input: 0 0% 20%; /* Dark input background */
-    --ring: 45 85% 55%; /* Gold for focus rings */
-    --chart-1: 45 70% 60%; /* Main gold */
-    --chart-2: 45 60% 50%; /* Slightly darker gold */
-    --chart-3: 0 0% 40%;   /* Medium gray */
-    --chart-4: 45 50% 40%; /* Darker gold/brownish */
-    --chart-5: 0 0% 60%;   /* Light gray */
+  :root { /* Light Mode Theme */
+    --background: 48 100% 90%; /* Light Yellowish */
+    --foreground: 337 50% 27%; /* Dark Maroon */
+    --card: 48 80% 96%; /* Very light yellow */
+    --card-foreground: 337 50% 27%;
+    --popover: 48 80% 96%;
+    --popover-foreground: 337 50% 27%;
+    --primary: 337 50% 35%; /* Dark Maroon for primary actions */
+    --primary-foreground: 48 100% 95%; /* Very light yellow for text on primary */
+    --secondary: 45 60% 70%; /* Muted gold */
+    --secondary-foreground: 337 50% 27%;
+    --muted: 45 50% 85%; /* Pale yellow */
+    --muted-foreground: 337 30% 45%; /* Medium dark maroon/gray */
+    --accent: 45 85% 55%; /* Gold */
+    --accent-foreground: 337 50% 20%; /* Darker Maroon for text on accent */
+    --destructive: 0 70% 50%; /* Standard destructive red */
+    --destructive-foreground: 0 0% 95%; /* White text on destructive */
+    --border: 45 50% 80%; /* Pale yellow border */
+    --input: 45 60% 92%; /* Slightly off-white input */
+    --ring: 337 50% 35%; /* Maroon for focus rings */
+    --chart-1: 337 50% 35%; /* Dark Maroon */
+    --chart-2: 45 85% 55%;   /* Gold */
+    --chart-3: 0 0% 60%;     /* Medium Gray */
+    --chart-4: 45 70% 45%;   /* Darker Gold/Brownish */
+    --chart-5: 0 0% 80%;     /* Light Gray */
     --radius: 0.5rem;
-    /* Sidebar variables for dark theme */
-    --sidebar-background: 0 0% 10%; /* Very dark for sidebar */
-    --sidebar-foreground: 0 0% 85%; /* Light text for sidebar */
-    --sidebar-primary: 45 85% 55%; /* Gold for active/primary items in sidebar */
-    --sidebar-primary-foreground: 0 0% 10%; /* Dark text on gold */
-    --sidebar-accent: 0 0% 20%; /* Accent for hover in sidebar */
-    --sidebar-accent-foreground: 0 0% 95%; /* Light text for hover */
-    --sidebar-border: 0 0% 22%;
-    --sidebar-ring: 45 85% 55%;
+    /* Sidebar variables for light theme */
+    --sidebar-background: 48 90% 92%; /* Very light yellow for sidebar */
+    --sidebar-foreground: 337 50% 27%; /* Dark maroon text */
+    --sidebar-primary: 337 50% 35%; /* Maroon for active/primary items */
+    --sidebar-primary-foreground: 48 100% 95%; /* Light text on maroon */
+    --sidebar-accent: 45 70% 85%; /* Accent for hover, pale gold */
+    --sidebar-accent-foreground: 337 50% 27%; /* Dark text for hover */
+    --sidebar-border: 45 50% 80%;
+    --sidebar-ring: 337 50% 35%;
   }
 
-  .dark { /* Ensuring .dark class also reflects the new dark theme */
+  .dark { /* Dark Mode Theme (Polygon University Colors) */
     --background: 0 0% 12%;
     --foreground: 0 0% 95%;
     --card: 0 0% 15%;
