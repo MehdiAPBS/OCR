@@ -580,6 +580,10 @@ body {
   display: block;
 }
 
+.inline-block {
+  display: inline-block;
+}
+
 .flex {
   display: flex;
 }
@@ -669,8 +673,8 @@ body {
   height: 1px;
 }
 
-.h-\[calc\(100vh-280px\)\] {
-  height: calc(100vh - 280px);
+.h-\[calc\(100vh-320px\)\] {
+  height: calc(100vh - 320px);
 }
 
 .h-\[var\(--radix-select-trigger-height\)\] {
@@ -984,6 +988,12 @@ body {
   margin-left: calc(.25rem * calc(1 - var(--tw-space-x-reverse)));
 }
 
+.space-x-2 > :not([hidden]) ~ :not([hidden]) {
+  --tw-space-x-reverse: 0;
+  margin-right: calc(.5rem * var(--tw-space-x-reverse));
+  margin-left: calc(.5rem * calc(1 - var(--tw-space-x-reverse)));
+}
+
 .space-x-3 > :not([hidden]) ~ :not([hidden]) {
   --tw-space-x-reverse: 0;
   margin-right: calc(.75rem * var(--tw-space-x-reverse));
@@ -1012,6 +1022,12 @@ body {
   --tw-space-y-reverse: 0;
   margin-top: calc(.5rem * calc(1 - var(--tw-space-y-reverse)));
   margin-bottom: calc(.5rem * var(--tw-space-y-reverse));
+}
+
+.space-y-3 > :not([hidden]) ~ :not([hidden]) {
+  --tw-space-y-reverse: 0;
+  margin-top: calc(.75rem * calc(1 - var(--tw-space-y-reverse)));
+  margin-bottom: calc(.75rem * var(--tw-space-y-reverse));
 }
 
 .space-y-4 > :not([hidden]) ~ :not([hidden]) {
@@ -1811,6 +1827,10 @@ body {
   background-color: hsl(var(--accent));
 }
 
+.hover\:bg-accent\/50:hover {
+  background-color: hsl(var(--accent) / .5);
+}
+
 .hover\:bg-accent\/90:hover {
   background-color: hsl(var(--accent) / .9);
 }
@@ -2069,6 +2089,14 @@ body {
 
 .peer:disabled ~ .peer-disabled\:opacity-70 {
   opacity: .7;
+}
+
+.has-\[\[data-state\=checked\]\]\:border-primary:has([data-state="checked"]) {
+  border-color: hsl(var(--primary));
+}
+
+.has-\[\[data-state\=checked\]\]\:bg-primary\/10:has([data-state="checked"]) {
+  background-color: hsl(var(--primary) / .1);
 }
 
 .has-\[\[data-variant\=inset\]\]\:bg-sidebar:has([data-variant="inset"]) {
@@ -2567,6 +2595,10 @@ body {
     justify-content: flex-end;
   }
 
+  .sm\:gap-4 {
+    gap: 1rem;
+  }
+
   .sm\:space-x-2 > :not([hidden]) ~ :not([hidden]) {
     --tw-space-x-reverse: 0;
     margin-right: calc(.5rem * var(--tw-space-x-reverse));
@@ -2599,16 +2631,16 @@ body {
 }
 
 @media (width >= 768px) {
-  .md\:mt-0 {
-    margin-top: 0;
-  }
-
   .md\:block {
     display: block;
   }
 
   .md\:flex {
     display: flex;
+  }
+
+  .md\:w-auto {
+    width: auto;
   }
 
   .md\:max-w-\[420px\] {
@@ -2621,14 +2653,6 @@ body {
 
   .md\:flex-row {
     flex-direction: row;
-  }
-
-  .md\:items-center {
-    align-items: center;
-  }
-
-  .md\:justify-end {
-    justify-content: flex-end;
   }
 
   .md\:p-8 {
