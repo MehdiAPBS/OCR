@@ -7,10 +7,10 @@ body {
 }
 
 @layer base {
-  :root { /* Light Mode Theme */
-    --background: 48 100% 90%; /* Light Yellowish */
-    --foreground: 337 50% 27%; /* Dark Maroon */
-    --card: 48 80% 96%; /* Very light yellow */
+  :root { /* Light Mode Theme - Polygon University Inspired (Light Version) */
+    --background: 48 100% 90%; /* Light Yellowish Cream */
+    --foreground: 337 50% 27%; /* Dark Maroon/Brown for text */
+    --card: 48 80% 96%; /* Very light yellow, slightly off from background */
     --card-foreground: 337 50% 27%;
     --popover: 48 80% 96%;
     --popover-foreground: 337 50% 27%;
@@ -20,58 +20,58 @@ body {
     --secondary-foreground: 337 50% 27%;
     --muted: 45 50% 85%; /* Pale yellow */
     --muted-foreground: 337 30% 45%; /* Medium dark maroon/gray */
-    --accent: 45 85% 55%; /* Gold */
+    --accent: 45 85% 55%; /* Bright Gold - like the logo */
     --accent-foreground: 337 50% 20%; /* Darker Maroon for text on accent */
     --destructive: 0 70% 50%; /* Standard destructive red */
     --destructive-foreground: 0 0% 95%; /* White text on destructive */
     --border: 45 50% 80%; /* Pale yellow border */
     --input: 45 60% 92%; /* Slightly off-white input */
-    --ring: 337 50% 35%; /* Maroon for focus rings */
-    --chart-1: 337 50% 35%; /* Dark Maroon */
-    --chart-2: 45 85% 55%;   /* Gold */
-    --chart-3: 0 0% 60%;     /* Medium Gray */
-    --chart-4: 45 70% 45%;   /* Darker Gold/Brownish */
-    --chart-5: 0 0% 80%;     /* Light Gray */
+    --ring: 45 85% 55%; /* Gold for focus rings */
+    --chart-1: 45 85% 55%;   /* Gold */
+    --chart-2: 337 50% 35%; /* Dark Maroon */
+    --chart-3: 45 70% 45%;   /* Darker Gold/Brownish */
+    --chart-4: 0 0% 60%;     /* Medium Gray */
+    --chart-5: 337 40% 55%; /* Lighter Maroon */
     --radius: 0.5rem;
     /* Sidebar variables for light theme */
     --sidebar-background: 48 90% 92%; /* Very light yellow for sidebar */
     --sidebar-foreground: 337 50% 27%; /* Dark maroon text */
-    --sidebar-primary: 337 50% 35%; /* Maroon for active/primary items */
-    --sidebar-primary-foreground: 48 100% 95%; /* Light text on maroon */
+    --sidebar-primary: 45 85% 55%; /* Gold for active/primary items */
+    --sidebar-primary-foreground: 337 50% 20%; /* Dark text on gold */
     --sidebar-accent: 45 70% 85%; /* Accent for hover, pale gold */
     --sidebar-accent-foreground: 337 50% 27%; /* Dark text for hover */
     --sidebar-border: 45 50% 80%;
-    --sidebar-ring: 337 50% 35%;
+    --sidebar-ring: 45 85% 55%;
   }
 
   .dark { /* Dark Mode Theme (Polygon University Colors) */
-    --background: 0 0% 12%;
-    --foreground: 0 0% 95%;
+    --background: 0 0% 12%; /* Dark Gray/Black */
+    --foreground: 0 0% 95%; /* Off-white text */
     --card: 0 0% 15%;
     --card-foreground: 0 0% 95%;
     --popover: 0 0% 15%;
     --popover-foreground: 0 0% 95%;
-    --primary: 45 85% 55%;
-    --primary-foreground: 0 0% 10%;
-    --secondary: 0 0% 20%;
+    --primary: 45 85% 55%; /* Gold for primary actions */
+    --primary-foreground: 0 0% 10%; /* Dark text on gold */
+    --secondary: 0 0% 20%; /* Darker gray for secondary elements */
     --secondary-foreground: 0 0% 90%;
     --muted: 0 0% 25%;
     --muted-foreground: 0 0% 60%;
-    --accent: 45 75% 60%;
-    --accent-foreground: 0 0% 10%;
+    --accent: 45 75% 60%; /* Slightly brighter gold for accents */
+    --accent-foreground: 0 0% 10%; /* Dark text on accent */
     --destructive: 0 70% 50%;
     --destructive-foreground: 0 0% 95%;
     --border: 0 0% 25%;
     --input: 0 0% 20%;
-    --ring: 45 85% 55%;
-    --chart-1: 45 70% 60%;
-    --chart-2: 45 60% 50%;
-    --chart-3: 0 0% 40%;
-    --chart-4: 45 50% 40%;
-    --chart-5: 0 0% 60%;
+    --ring: 45 85% 55%; /* Gold for focus rings */
+    --chart-1: 45 70% 60%; /* Gold */
+    --chart-2: 45 60% 50%; /* Darker Gold */
+    --chart-3: 0 0% 40%;   /* Medium Gray */
+    --chart-4: 45 50% 40%; /* Brownish Gold */
+    --chart-5: 0 0% 60%;   /* Light Gray */
     --sidebar-background: 0 0% 10%;
     --sidebar-foreground: 0 0% 85%;
-    --sidebar-primary: 45 85% 55%;
+    --sidebar-primary: 45 85% 55%; /* Gold */
     --sidebar-primary-foreground: 0 0% 10%;
     --sidebar-accent: 0 0% 20%;
     --sidebar-accent-foreground: 0 0% 95%;

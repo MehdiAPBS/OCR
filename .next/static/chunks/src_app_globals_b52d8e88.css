@@ -320,21 +320,21 @@ img, video {
   --destructive-foreground: 0 0% 95%;
   --border: 45 50% 80%;
   --input: 45 60% 92%;
-  --ring: 337 50% 35%;
-  --chart-1: 337 50% 35%;
-  --chart-2: 45 85% 55%;
-  --chart-3: 0 0% 60%;
-  --chart-4: 45 70% 45%;
-  --chart-5: 0 0% 80%;
+  --ring: 45 85% 55%;
+  --chart-1: 45 85% 55%;
+  --chart-2: 337 50% 35%;
+  --chart-3: 45 70% 45%;
+  --chart-4: 0 0% 60%;
+  --chart-5: 337 40% 55%;
   --radius: .5rem;
   --sidebar-background: 48 90% 92%;
   --sidebar-foreground: 337 50% 27%;
-  --sidebar-primary: 337 50% 35%;
-  --sidebar-primary-foreground: 48 100% 95%;
+  --sidebar-primary: 45 85% 55%;
+  --sidebar-primary-foreground: 337 50% 20%;
   --sidebar-accent: 45 70% 85%;
   --sidebar-accent-foreground: 337 50% 27%;
   --sidebar-border: 45 50% 80%;
-  --sidebar-ring: 337 50% 35%;
+  --sidebar-ring: 45 85% 55%;
 }
 
 .dark {
@@ -536,6 +536,10 @@ body {
   margin-bottom: .25rem;
 }
 
+.-mt-4 {
+  margin-top: -1rem;
+}
+
 .mb-1 {
   margin-bottom: .25rem;
 }
@@ -673,6 +677,10 @@ body {
   height: 2.25rem;
 }
 
+.h-\[1\.2rem\] {
+  height: 1.2rem;
+}
+
 .h-\[1px\] {
   height: 1px;
 }
@@ -789,6 +797,10 @@ body {
   width: var(--sidebar-width);
 }
 
+.w-\[1\.2rem\] {
+  width: 1.2rem;
+}
+
 .w-\[1px\] {
   width: 1px;
 }
@@ -883,6 +895,28 @@ body {
 
 .translate-y-\[-50\%\] {
   --tw-translate-y: -50%;
+  transform: translate(var(--tw-translate-x), var(--tw-translate-y)) rotate(var(--tw-rotate)) skewX(var(--tw-skew-x)) skewY(var(--tw-skew-y)) scaleX(var(--tw-scale-x)) scaleY(var(--tw-scale-y));
+}
+
+.rotate-0 {
+  --tw-rotate: 0deg;
+  transform: translate(var(--tw-translate-x), var(--tw-translate-y)) rotate(var(--tw-rotate)) skewX(var(--tw-skew-x)) skewY(var(--tw-skew-y)) scaleX(var(--tw-scale-x)) scaleY(var(--tw-scale-y));
+}
+
+.rotate-90 {
+  --tw-rotate: 90deg;
+  transform: translate(var(--tw-translate-x), var(--tw-translate-y)) rotate(var(--tw-rotate)) skewX(var(--tw-skew-x)) skewY(var(--tw-skew-y)) scaleX(var(--tw-scale-x)) scaleY(var(--tw-scale-y));
+}
+
+.scale-0 {
+  --tw-scale-x: 0;
+  --tw-scale-y: 0;
+  transform: translate(var(--tw-translate-x), var(--tw-translate-y)) rotate(var(--tw-rotate)) skewX(var(--tw-skew-x)) skewY(var(--tw-skew-y)) scaleX(var(--tw-scale-x)) scaleY(var(--tw-scale-y));
+}
+
+.scale-100 {
+  --tw-scale-x: 1;
+  --tw-scale-y: 1;
   transform: translate(var(--tw-translate-x), var(--tw-translate-y)) rotate(var(--tw-rotate)) skewX(var(--tw-skew-x)) skewY(var(--tw-skew-y)) scaleX(var(--tw-scale-x)) scaleY(var(--tw-scale-y));
 }
 
@@ -1399,9 +1433,9 @@ body {
   line-height: 2rem;
 }
 
-.text-4xl {
-  font-size: 2.25rem;
-  line-height: 2.5rem;
+.text-3xl {
+  font-size: 1.875rem;
+  line-height: 2.25rem;
 }
 
 .text-\[0\.8rem\] {
@@ -2573,6 +2607,28 @@ body {
   color: hsl(var(--sidebar-accent-foreground));
 }
 
+.dark\:-rotate-90:is(.dark *) {
+  --tw-rotate: -90deg;
+  transform: translate(var(--tw-translate-x), var(--tw-translate-y)) rotate(var(--tw-rotate)) skewX(var(--tw-skew-x)) skewY(var(--tw-skew-y)) scaleX(var(--tw-scale-x)) scaleY(var(--tw-scale-y));
+}
+
+.dark\:rotate-0:is(.dark *) {
+  --tw-rotate: 0deg;
+  transform: translate(var(--tw-translate-x), var(--tw-translate-y)) rotate(var(--tw-rotate)) skewX(var(--tw-skew-x)) skewY(var(--tw-skew-y)) scaleX(var(--tw-scale-x)) scaleY(var(--tw-scale-y));
+}
+
+.dark\:scale-0:is(.dark *) {
+  --tw-scale-x: 0;
+  --tw-scale-y: 0;
+  transform: translate(var(--tw-translate-x), var(--tw-translate-y)) rotate(var(--tw-rotate)) skewX(var(--tw-skew-x)) skewY(var(--tw-skew-y)) scaleX(var(--tw-scale-x)) scaleY(var(--tw-scale-y));
+}
+
+.dark\:scale-100:is(.dark *) {
+  --tw-scale-x: 1;
+  --tw-scale-y: 1;
+  transform: translate(var(--tw-translate-x), var(--tw-translate-y)) rotate(var(--tw-rotate)) skewX(var(--tw-skew-x)) skewY(var(--tw-skew-y)) scaleX(var(--tw-scale-x)) scaleY(var(--tw-scale-y));
+}
+
 .dark\:border-destructive:is(.dark *) {
   border-color: hsl(var(--destructive));
 }
@@ -2588,6 +2644,10 @@ body {
 
   .sm\:top-auto {
     top: auto;
+  }
+
+  .sm\:mb-0 {
+    margin-bottom: 0;
   }
 
   .sm\:mt-0 {
@@ -2676,6 +2736,11 @@ body {
 
   .md\:p-8 {
     padding: 2rem;
+  }
+
+  .md\:text-4xl {
+    font-size: 2.25rem;
+    line-height: 2.5rem;
   }
 
   .md\:text-sm {

@@ -23,19 +23,21 @@ type ExtractionEngine = ExtractDataFromPdfInput['extractionEngine'];
 
 interface ProcessedPdfEntry {
   file: File;
-  pdfData: ExtractedPdfData | null;
+  // pdfData: ExtractedPdfData | null; // This will be stored in allProcessedData
   documentInstanceId: string;
 }
 
 export default function PdfExtractorPage() {
   const [processedEntries, setProcessedEntries] = useState<ProcessedPdfEntry[]>([]);
   const [currentPdfIndex, setCurrentPdfIndex] = useState<number>(0);
+  // allProcessedData stores the extracted data for each PDF, keyed by its original index.
   const [allProcessedData, setAllProcessedData] = useState<(ExtractedPdfData | null)[]>([]);
 
 
   const [pdfObjectUrl, setPdfObjectUrl] = useState<string | null>(null);
   const [pdfDataUri, setPdfDataUri] = useState<string | null>(null);
 
+  // currentExtractedData holds the data for the *currently displayed* PDF for editing.
   const [currentExtractedData, setCurrentExtractedData] = useState<ExtractedPdfData | null>(null);
 
   const [extractionEngine, setExtractionEngine] = useState<ExtractionEngine>('genkitDirect');
@@ -49,6 +51,7 @@ export default function PdfExtractorPage() {
 
   useEffect(() => {
     const currentUrl = pdfObjectUrl;
+    // Cleanup object URL when component unmounts or pdfObjectUrl changes
     return () => {
       if (currentUrl) {
         URL.revokeObjectURL(currentUrl);
@@ -56,13 +59,15 @@ export default function PdfExtractorPage() {
     };
   }, [pdfObjectUrl]);
 
+  // Loads a PDF by its index in the processedEntries array
   const loadPdfAtIndex = (index: number, entries: ProcessedPdfEntry[] = processedEntries, data: (ExtractedPdfData | null)[] = allProcessedData) => {
-    if (pdfObjectUrl) {
+    if (pdfObjectUrl) { // Revoke previous object URL to prevent memory leaks
       URL.revokeObjectURL(pdfObjectUrl);
       setPdfObjectUrl(null);
     }
 
     if (entries.length === 0 && index === 0) {
+      // Handle case where all files are cleared
       setPdfDataUri(null);
       setCurrentExtractedData(null);
       setError(null);
@@ -74,6 +79,7 @@ export default function PdfExtractorPage() {
       const newObjectUrl = URL.createObjectURL(entry.file);
       setPdfObjectUrl(newObjectUrl);
 
+      // Convert file to data URI for the AI flow
       const reader = new FileReader();
       reader.onloadend = () => {
         setPdfDataUri(reader.result as string);
@@ -84,9 +90,11 @@ export default function PdfExtractorPage() {
       }
       reader.readAsDataURL(entry.file);
 
+      // Set the current extracted data from our stored array
       setCurrentExtractedData(data[index] || null);
-      setError(null);
+      setError(null); // Clear previous errors
     } else {
+      // Index out of bounds (e.g., navigated past the end of the queue)
       setPdfDataUri(null);
       setCurrentExtractedData(null);
       setError(null);
@@ -99,13 +107,15 @@ export default function PdfExtractorPage() {
     }
   };
 
+  // Advances to the next PDF automatically after a successful save
   const advanceToNextPdf = () => {
     const newIndex = currentPdfIndex + 1;
     setCurrentPdfIndex(newIndex);
     if (newIndex < processedEntries.length) {
       loadPdfAtIndex(newIndex, processedEntries, allProcessedData);
     } else {
-      loadPdfAtIndex(newIndex, processedEntries, allProcessedData); // Will show end of queue message
+      // Reached the end of the queue
+      loadPdfAtIndex(newIndex, processedEntries, allProcessedData); // This will show end of queue message
       toast({
         title: "Queue Finished",
         description: "All PDFs in the queue have been processed and saved (or viewed).",
@@ -120,32 +130,36 @@ export default function PdfExtractorPage() {
       if (newPdfFiles.length > 0) {
         const newEntries: ProcessedPdfEntry[] = newPdfFiles.map(file => ({
           file,
-          pdfData: null, // pdfData will be populated by allProcessedData
-          documentInstanceId: uuidv4(),
+          // pdfData will be populated by allProcessedData
+          documentInstanceId: uuidv4(), // Generate a unique ID for this PDF instance
         }));
-        const newAllData = new Array(newPdfFiles.length).fill(null);
+        const newAllData = new Array(newPdfFiles.length).fill(null); // Initialize data storage for new files
+
         setProcessedEntries(newEntries);
         setAllProcessedData(newAllData);
-        setCurrentPdfIndex(0);
+        setCurrentPdfIndex(0); // Start with the first PDF
         loadPdfAtIndex(0, newEntries, newAllData);
         setError(null);
       } else {
+        // No valid PDFs selected
         setProcessedEntries([]);
         setAllProcessedData([]);
         setCurrentPdfIndex(0);
-        loadPdfAtIndex(0, [], []);
+        loadPdfAtIndex(0, [], []); // Clear viewer and data
         setError("Please select valid PDF files.");
         toast({ title: "Invalid Files", description: "No valid PDF files were selected.", variant: "destructive" });
       }
     } else {
+      // No files selected, clear everything
       setProcessedEntries([]);
       setAllProcessedData([]);
       setCurrentPdfIndex(0);
       loadPdfAtIndex(0, [], []);
       setError(null);
     }
+    // Reset the file input so the same file can be re-uploaded if needed
     if (event.target) {
-        event.target.value = ''; // Reset file input
+        event.target.value = '';
     }
   };
 
@@ -171,7 +185,7 @@ export default function PdfExtractorPage() {
         console.error("Error from AI flow:", result.error, "Full result object:", result);
         const displayError = `AI Flow Error: ${result.error}`;
         setError(displayError);
-        setCurrentExtractedData(allProcessedData[currentPdfIndex] || null);
+        setCurrentExtractedData(allProcessedData[currentPdfIndex] || null); // Revert to previously stored data if any
         toast({ title: "Extraction Failed", description: displayError, variant: "destructive" });
         setIsLoading(false);
         return;
@@ -181,6 +195,7 @@ export default function PdfExtractorPage() {
         try {
           const parsedData: ExtractedPdfData = JSON.parse(result.jsonOutput);
           setCurrentExtractedData(parsedData);
+          // Store the newly extracted data in our allProcessedData array
           setAllProcessedData(prevAllData => {
             const newAllData = [...prevAllData];
             newAllData[currentPdfIndex] = parsedData;
@@ -198,6 +213,7 @@ export default function PdfExtractorPage() {
           toast({ title: "Parsing Failed", description: displayError, variant: "destructive" });
         }
       } else {
+        // Handle cases where AI might return empty or default data structure without an explicit error
         let errorMessage = "AI did not return expected data format or returned empty/default data.";
          if (!result) errorMessage = "No response from AI service.";
          else if (!result.jsonOutput) errorMessage = "AI response missing 'jsonOutput' field.";
@@ -206,6 +222,7 @@ export default function PdfExtractorPage() {
          }
         console.warn("Problematic AI Result:", errorMessage, "Full result object:", result);
         setError(errorMessage);
+        // Attempt to show the (potentially empty/default) data returned by the AI
         try {
           const parsedData: ExtractedPdfData | null = result && result.jsonOutput ? JSON.parse(result.jsonOutput) : null;
           setCurrentExtractedData(parsedData);
@@ -214,16 +231,16 @@ export default function PdfExtractorPage() {
             newAllData[currentPdfIndex] = parsedData;
             return newAllData;
           });
-          if (parsedData) {
+          if (parsedData) { // If it's a valid (even if empty) structure
             toast({
               title: "Extraction Note",
               description: "AI processed the PDF but returned default/empty values for some or all fields. Data is shown for review.",
-              variant: "default"
+              variant: "default" // Use default variant for notes
             });
           }
         } catch (e) {
            console.error("Error parsing even default AI output:", e, "Raw output:", result?.jsonOutput);
-           setCurrentExtractedData(allProcessedData[currentPdfIndex] || null);
+           setCurrentExtractedData(allProcessedData[currentPdfIndex] || null); // Revert to stored if parsing default fails
         }
       }
     } catch (err: any) {
@@ -239,6 +256,7 @@ export default function PdfExtractorPage() {
 
   const handleDataChange = (updatedData: ExtractedPdfData) => {
     setCurrentExtractedData(updatedData);
+    // Also update the data in our allProcessedData array for persistence across navigation
     setAllProcessedData(prevAllData => {
       const newAllData = [...prevAllData];
       if (currentPdfIndex >= 0 && currentPdfIndex < newAllData.length) {
@@ -249,7 +267,7 @@ export default function PdfExtractorPage() {
   };
 
   const handleDownloadJson = () => {
-    const dataToDownload = allProcessedData[currentPdfIndex];
+    const dataToDownload = allProcessedData[currentPdfIndex]; // Get data for the current PDF
     if (!dataToDownload) {
       toast({
         title: "No Data",
@@ -287,7 +305,7 @@ export default function PdfExtractorPage() {
 
   const handleSaveToMongoDb = async () => {
     const currentEntry = processedEntries[currentPdfIndex];
-    const dataToSave = allProcessedData[currentPdfIndex];
+    const dataToSave = allProcessedData[currentPdfIndex]; // Get data for the current PDF
 
     if (!dataToSave) {
       toast({
@@ -315,7 +333,7 @@ export default function PdfExtractorPage() {
           title: "Saved to MongoDB",
           description: `${result.message} (ID: ${result.recordId || 'N/A'}) for ${currentEntry?.file.name || 'current PDF'}.`,
         });
-        advanceToNextPdf();
+        advanceToNextPdf(); // Move to next PDF after successful save
       } else {
         toast({
           title: "MongoDB Save Failed",
@@ -337,7 +355,7 @@ export default function PdfExtractorPage() {
 
   const handleSaveToSheet = async () => {
     const currentEntry = processedEntries[currentPdfIndex];
-    const dataToSave = allProcessedData[currentPdfIndex];
+    const dataToSave = allProcessedData[currentPdfIndex]; // Get data for the current PDF
     const docInstanceId = currentEntry?.documentInstanceId;
 
     if (!dataToSave || !docInstanceId) {
@@ -359,7 +377,7 @@ export default function PdfExtractorPage() {
           title: "Saved to Google Sheet",
           description: `${result.message} for ${currentEntry?.file.name || 'current PDF'}.`,
         });
-        advanceToNextPdf();
+        advanceToNextPdf(); // Move to next PDF after successful save
       } else {
         toast({
           title: "Google Sheet Save Failed",
@@ -388,13 +406,11 @@ export default function PdfExtractorPage() {
   };
 
   const handleNextPdf = () => {
-    if (currentPdfIndex < processedEntries.length - 1) {
+    // Allow going to the "end of queue" state which is `processedEntries.length`
+    if (currentPdfIndex < processedEntries.length) {
       const newIndex = currentPdfIndex + 1;
       setCurrentPdfIndex(newIndex);
       loadPdfAtIndex(newIndex, processedEntries, allProcessedData);
-    } else if (currentPdfIndex === processedEntries.length - 1 && processedEntries.length > 0) {
-      setCurrentPdfIndex(processedEntries.length);
-      loadPdfAtIndex(processedEntries.length, processedEntries, allProcessedData);
     }
   };
 
@@ -402,10 +418,17 @@ export default function PdfExtractorPage() {
   const isAnySavingInProgress = isSavingToMongoDb || isSavingToSheet;
   const isAnyOperationInProgress = isLoading || isAnySavingInProgress;
 
+  // Disable process button if loading/saving or if no PDF is ready to be processed (e.g., end of queue)
   const processPdfDisabled = isAnyOperationInProgress || !canProcess;
+
+  // Disable action buttons if no data is currently extracted or if an operation is in progress
   const actionButtonsDisabled = !currentExtractedData || isAnyOperationInProgress;
+
+  // Disable previous button if at the start, no files, or operation in progress
   const prevButtonDisabled = currentPdfIndex === 0 || isAnyOperationInProgress || processedEntries.length === 0;
-  const nextButtonDisabled = currentPdfIndex >= processedEntries.length -1 || isAnyOperationInProgress || processedEntries.length === 0;
+
+  // Disable next button if at the "end of queue" state (index equals length), no files, or operation in progress
+  const nextButtonDisabled = currentPdfIndex >= processedEntries.length || isAnyOperationInProgress || processedEntries.length === 0;
 
 
   const currentFile = processedEntries[currentPdfIndex]?.file;
@@ -415,7 +438,7 @@ export default function PdfExtractorPage() {
       <header className="mb-8 flex flex-col sm:flex-row items-center justify-between">
         <div className="flex items-center gap-4 mb-4 sm:mb-0">
           <Image
-            src="https://placehold.co/64x64.png"
+            src="https://i.ibb.co/DDRC4Mm/logo.png"
             alt="Polygon University Logo"
             width={64}
             height={64}
@@ -446,12 +469,13 @@ export default function PdfExtractorPage() {
                 id="pdf-upload"
                 type="file"
                 accept=".pdf"
-                multiple
+                multiple // Allow multiple file selection
                 onChange={handleFileChange}
                 className="flex-grow file:mr-4 file:py-2 file:px-4 file:rounded-full file:border-0 file:text-sm file:font-semibold file:bg-primary/10 file:text-primary hover:file:bg-primary/20 cursor-pointer"
                 aria-label="Upload PDF Documents"
               />
             </div>
+            {/* Navigation and file info */}
             {processedEntries.length > 0 && (
               <div className="mt-3 flex items-center gap-2">
                  <Button
@@ -522,6 +546,7 @@ export default function PdfExtractorPage() {
                 )}
                 {isLoading ? "Processing..." : (canProcess ? `Process PDF ${currentPdfIndex + 1}` : "Process PDF")}
               </Button>
+            {/* Action buttons only show if there's data for the current PDF */}
             {currentExtractedData && (
              <>
                 <Button
