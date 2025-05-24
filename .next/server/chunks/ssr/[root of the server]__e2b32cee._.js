@@ -535,6 +535,8 @@ var __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist
 /**
  * @fileOverview Saves extracted PDF data to a Google Sheet.
  * Each student will be on a new row, with other PDF data repeated.
+ * If data for the same documentInstanceId already exists, it's deleted before appending.
+ * Operations are performed on the *first sheet* found in the spreadsheet.
  *
  * - saveToGoogleSheet - A function that handles saving data to Google Sheets.
  * - SaveToGoogleSheetInput - The input type for the saveToGoogleSheet function.
@@ -551,7 +553,10 @@ var __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist
 ;
 ;
 ;
-const SaveToGoogleSheetInputSchema = __TURBOPACK__imported__module__$5b$project$5d2f$src$2f$ai$2f$schemas$2f$pdf$2d$data$2d$schema$2e$ts__$5b$app$2d$rsc$5d$__$28$ecmascript$29$__["ExtractedPdfDataSchema"]; // Input is the full extracted data object
+const SaveToGoogleSheetInputSchema = __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$genkit$2f$lib$2f$common$2e$js__$5b$app$2d$rsc$5d$__$28$ecmascript$29$__["z"].object({
+    extractedData: __TURBOPACK__imported__module__$5b$project$5d2f$src$2f$ai$2f$schemas$2f$pdf$2d$data$2d$schema$2e$ts__$5b$app$2d$rsc$5d$__$28$ecmascript$29$__["ExtractedPdfDataSchema"],
+    documentInstanceId: __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$genkit$2f$lib$2f$common$2e$js__$5b$app$2d$rsc$5d$__$28$ecmascript$29$__["z"].string().describe('A unique identifier for this PDF processing instance.')
+});
 const SaveToGoogleSheetOutputSchema = __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$genkit$2f$lib$2f$common$2e$js__$5b$app$2d$rsc$5d$__$28$ecmascript$29$__["z"].object({
     success: __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$genkit$2f$lib$2f$common$2e$js__$5b$app$2d$rsc$5d$__$28$ecmascript$29$__["z"].boolean().describe('Whether the save operation was successful.'),
     message: __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$genkit$2f$lib$2f$common$2e$js__$5b$app$2d$rsc$5d$__$28$ecmascript$29$__["z"].string().describe('A message detailing the outcome of the save operation.'),
@@ -565,7 +570,7 @@ const saveToGoogleSheetFlow = __TURBOPACK__imported__module__$5b$project$5d2f$sr
     name: 'saveToGoogleSheetFlow',
     inputSchema: SaveToGoogleSheetInputSchema,
     outputSchema: SaveToGoogleSheetOutputSchema
-}, async (data)=>{
+}, async ({ extractedData: data, documentInstanceId })=>{
     const spreadsheetId = process.env.GOOGLE_SHEET_ID;
     const serviceAccountCredsJsonString = process.env.GOOGLE_SERVICE_ACCOUNT_CREDENTIALS_JSON;
     if (!spreadsheetId) {
@@ -584,6 +589,7 @@ const saveToGoogleSheetFlow = __TURBOPACK__imported__module__$5b$project$5d2f$sr
     try {
         credentials = JSON.parse(serviceAccountCredsJsonString);
         if (credentials && credentials.private_key) {
+            // Ensure private_key newlines are correctly formatted for the googleapis library
             credentials.private_key = credentials.private_key.replace(/\\n/g, '\n');
         }
     } catch (error) {
@@ -610,7 +616,42 @@ const saveToGoogleSheetFlow = __TURBOPACK__imported__module__$5b$project$5d2f$sr
             version: 'v4',
             auth
         });
+        // --- Get properties of the first sheet ---
+        let firstSheetProperties;
+        let actualSheetNameUsed;
+        let actualSheetIdNumberUsed;
+        try {
+            const spreadsheetDetails = await sheets.spreadsheets.get({
+                spreadsheetId,
+                fields: 'sheets(properties(sheetId,title))'
+            });
+            if (!spreadsheetDetails.data.sheets || spreadsheetDetails.data.sheets.length === 0) {
+                return {
+                    success: false,
+                    message: 'The specified spreadsheet contains no sheets.'
+                };
+            }
+            // Assume we operate on the first sheet (gid=0 equivalent)
+            const firstSheet = spreadsheetDetails.data.sheets[0];
+            if (!firstSheet.properties || typeof firstSheet.properties.sheetId !== 'number' || !firstSheet.properties.title) {
+                return {
+                    success: false,
+                    message: 'Could not retrieve valid properties (ID and Title) for the first sheet.'
+                };
+            }
+            firstSheetProperties = firstSheet.properties;
+            actualSheetNameUsed = firstSheetProperties.title;
+            actualSheetIdNumberUsed = firstSheetProperties.sheetId;
+        } catch (e) {
+            console.error("Failed to get spreadsheet details (for sheetId/title):", e.message);
+            return {
+                success: false,
+                message: `Failed to get spreadsheet details: ${e.message}`
+            };
+        }
+        console.log(`Operating on sheet titled: '${actualSheetNameUsed}' with numerical ID: ${actualSheetIdNumberUsed}`);
         const newHeaderRow = [
+            'DocumentInstanceID',
             'Classe',
             'Cours',
             'Date',
@@ -621,6 +662,69 @@ const saveToGoogleSheetFlow = __TURBOPACK__imported__module__$5b$project$5d2f$sr
             'N° Étudiant',
             'Nom & Prénom Étudiant'
         ];
+        const documentInstanceIdColumnIndex = 0;
+        // --- 1. Check and write header if necessary ---
+        let sheetNeedsHeader = true;
+        try {
+            const headerCheckRange = `${actualSheetNameUsed}!A1:${String.fromCharCode(64 + newHeaderRow.length)}1`;
+            const headerCheck = await sheets.spreadsheets.values.get({
+                spreadsheetId,
+                range: headerCheckRange
+            });
+            if (headerCheck.data.values && headerCheck.data.values.length > 0) {
+                if (JSON.stringify(headerCheck.data.values[0]) === JSON.stringify(newHeaderRow)) {
+                    sheetNeedsHeader = false;
+                }
+            }
+        } catch (getHeaderError) {
+            if (getHeaderError.message && (getHeaderError.message.includes("Unable to parse range") || getHeaderError.message.includes("Requested entity was not found"))) {
+                sheetNeedsHeader = true; // Sheet or range doesn't exist, so header is needed
+            } else if (getHeaderError.response && getHeaderError.response.data && getHeaderError.response.data.error && getHeaderError.response.data.error.code === 404) {
+                sheetNeedsHeader = true; // Also indicates entity not found
+            } else {
+                // For other errors, conservatively assume header might be needed or log warning.
+                console.warn("Could not definitively check for header due to an error. Proceeding as if header is needed. Error:", getHeaderError.message);
+                sheetNeedsHeader = true;
+            }
+        }
+        // --- 2. Find and delete existing rows for this documentInstanceId ---
+        if (!sheetNeedsHeader) {
+            console.log(`Checking for existing data with DocumentInstanceID: ${documentInstanceId} in sheet: ${actualSheetNameUsed}`);
+            const dataToSearch = await sheets.spreadsheets.values.get({
+                spreadsheetId,
+                range: `${actualSheetNameUsed}!A:A`
+            });
+            const rowsToDelete = [];
+            if (dataToSearch.data.values) {
+                for(let i = 0; i < dataToSearch.data.values.length; i++){
+                    if (dataToSearch.data.values[i][documentInstanceIdColumnIndex] === documentInstanceId) {
+                        rowsToDelete.push({
+                            deleteDimension: {
+                                range: {
+                                    sheetId: actualSheetIdNumberUsed,
+                                    dimension: 'ROWS',
+                                    startIndex: i,
+                                    endIndex: i + 1
+                                }
+                            }
+                        });
+                    }
+                }
+            }
+            if (rowsToDelete.length > 0) {
+                rowsToDelete.sort((a, b)=>b.deleteDimension.range.startIndex - a.deleteDimension.range.startIndex);
+                console.log(`Found ${rowsToDelete.length} existing row(s) for DocumentInstanceID ${documentInstanceId}. Deleting them.`);
+                await sheets.spreadsheets.batchUpdate({
+                    spreadsheetId,
+                    requestBody: {
+                        requests: rowsToDelete
+                    }
+                });
+            } else {
+                console.log(`No existing rows found for DocumentInstanceID ${documentInstanceId}.`);
+            }
+        }
+        // --- 3. Prepare and append new data ---
         const dataRowsToAppend = [];
         const commonData = [
             data.classe ?? "",
@@ -634,46 +738,19 @@ const saveToGoogleSheetFlow = __TURBOPACK__imported__module__$5b$project$5d2f$sr
         if (data.présences && data.présences.length > 0) {
             for (const student of data.présences){
                 dataRowsToAppend.push([
+                    documentInstanceId,
                     ...commonData,
                     student.n ?? "",
                     student.nom_prénom ?? ""
                 ]);
             }
         } else {
-            // If no students, add one row with common data and blank student fields
             dataRowsToAppend.push([
+                documentInstanceId,
                 ...commonData,
                 "",
                 ""
             ]);
-        }
-        let sheetNeedsHeader = true;
-        try {
-            // Construct the range string for checking the header, e.g., "Sheet1!A1:I1"
-            const headerCheckRange = `Sheet1!A1:${String.fromCharCode(64 + newHeaderRow.length)}1`;
-            const headerCheck = await sheets.spreadsheets.values.get({
-                spreadsheetId,
-                range: headerCheckRange
-            });
-            if (headerCheck.data.values && headerCheck.data.values.length > 0) {
-                // Compare the fetched header with the expected header
-                if (JSON.stringify(headerCheck.data.values[0]) === JSON.stringify(newHeaderRow)) {
-                    sheetNeedsHeader = false;
-                }
-            }
-        } catch (getHeaderError) {
-            // Handle cases where the sheet might be empty or the range doesn't exist yet
-            if (getHeaderError.message && (getHeaderError.message.includes("Unable to parse range") || getHeaderError.message.includes("Requested entity was not found"))) {
-                // This typically means the sheet is empty or doesn't have enough columns yet, so header is needed.
-                sheetNeedsHeader = true;
-            } else if (getHeaderError.response && getHeaderError.response.data && getHeaderError.response.data.error && getHeaderError.response.data.error.code === 404) {
-                // Another way Google API might indicate the sheet/range doesn't exist
-                sheetNeedsHeader = true;
-            } else {
-                // For other errors, log a warning but proceed cautiously, assuming header might be needed.
-                console.warn("Could not definitively check for header due to an error. Error:", getHeaderError.message);
-                sheetNeedsHeader = true; // Default to needing header on unexpected error
-            }
         }
         const finalRowsForSheet = [];
         if (sheetNeedsHeader) {
@@ -681,28 +758,28 @@ const saveToGoogleSheetFlow = __TURBOPACK__imported__module__$5b$project$5d2f$sr
             finalRowsForSheet.push(newHeaderRow);
         }
         finalRowsForSheet.push(...dataRowsToAppend);
-        if (finalRowsForSheet.length === 0) {
+        if (finalRowsForSheet.length === 0 || finalRowsForSheet.length === 1 && sheetNeedsHeader && dataRowsToAppend.length === 0) {
             return {
                 success: true,
-                message: 'No data to append to Google Sheet.',
+                message: 'No new data rows to append to Google Sheet.',
                 spreadsheetId: spreadsheetId
             };
         }
-        const response = await sheets.spreadsheets.values.append({
+        const appendResponse = await sheets.spreadsheets.values.append({
             spreadsheetId,
-            range: 'Sheet1!A1',
+            range: `${actualSheetNameUsed}!A1`,
             valueInputOption: 'USER_ENTERED',
             insertDataOption: 'INSERT_ROWS',
             requestBody: {
                 values: finalRowsForSheet
             }
         });
-        console.log('Successfully saved to Google Sheet:', response.data);
+        console.log('Successfully saved/updated data in Google Sheet:', appendResponse.data);
         return {
             success: true,
-            message: `Data successfully saved to Google Sheet. ${dataRowsToAppend.length} data row(s) added. ${sheetNeedsHeader ? 'Header was also written.' : 'Existing header was used.'}`,
-            spreadsheetId: response.data.spreadsheetId,
-            updatedRange: response.data.updates?.updatedRange
+            message: `Data successfully saved/updated in Google Sheet '${actualSheetNameUsed}'. ${dataRowsToAppend.length} data row(s) processed for DocumentInstanceID ${documentInstanceId}. ${sheetNeedsHeader ? 'Header was also written.' : ''}`,
+            spreadsheetId: appendResponse.data.spreadsheetId,
+            updatedRange: appendResponse.data.updates?.updatedRange
         };
     } catch (error) {
         console.error('Error saving to Google Sheet:', error.message, error.stack, error.response?.data?.error);
