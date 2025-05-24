@@ -10,10 +10,10 @@ import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 import PdfViewer from "@/components/pdf-viewer";
 import DataEditor from "@/components/data-editor";
 import { extractDataFromPdf, type ExtractDataFromPdfOutput, type ExtractDataFromPdfInput } from "@/ai/flows/extract-data-from-pdf";
-import { saveToGoogleSheet, type SaveToGoogleSheetOutput } from "@/ai/flows/save-to-google-sheet";
+// import { saveToGoogleSheet, type SaveToGoogleSheetOutput } from "@/ai/flows/save-to-google-sheet"; // Reverted
 import type { ExtractedPdfData } from "@/ai/schemas/pdf-data-schema";
 import { useToast } from "@/hooks/use-toast";
-import { Cpu, FileJson, Loader2, AlertTriangle, Database, Sheet as SheetIcon, Settings2, ArrowLeft, ArrowRight } from 'lucide-react';
+import { Cpu, FileJson, Loader2, AlertTriangle, Database, /* Sheet as SheetIcon, */ Settings2, ArrowLeft, ArrowRight } from 'lucide-react'; // Reverted SheetIcon
 
 type ExtractionEngine = ExtractDataFromPdfInput['extractionEngine'];
 
@@ -24,28 +24,35 @@ export default function PdfExtractorPage() {
   const [pdfObjectUrl, setPdfObjectUrl] = useState<string | null>(null);
   const [pdfDataUri, setPdfDataUri] = useState<string | null>(null);
   
-  const [extractedData, setExtractedData] = useState<ExtractedPdfData | null>(null);
+  const [extractedData, setExtractedData] = useState<ExtractedPdfData | null>(null); // Data for the current PDF
+  const [allProcessedData, setAllProcessedData] = useState<Array<ExtractedPdfData | null>>([]); // Persisted data for all PDFs
+
   const [extractionEngine, setExtractionEngine] = useState<ExtractionEngine>('genkitDirect');
   
   const [isLoading, setIsLoading] = useState<boolean>(false);
   const [isSavingToMongoDb, setIsSavingToMongoDb] = useState<boolean>(false);
-  const [isSavingToSheet, setIsSavingToSheet] = useState<boolean>(false);
+  // const [isSavingToSheet, setIsSavingToSheet] = useState<boolean>(false); // Reverted
   const [error, setError] = useState<string | null>(null);
 
   const { toast } = useToast();
 
   useEffect(() => {
     // Cleanup for the current PDF object URL when it changes or component unmounts
+    const currentUrl = pdfObjectUrl;
     return () => {
-      if (pdfObjectUrl) {
-        URL.revokeObjectURL(pdfObjectUrl);
+      if (currentUrl) {
+        URL.revokeObjectURL(currentUrl);
       }
     };
   }, [pdfObjectUrl]);
 
-  const loadPdfAtIndex = (index: number, filesToLoad: File[] = pdfFiles) => {
+  const loadPdfAtIndex = (index: number, filesToLoad: File[] = pdfFiles, dataToLoad: Array<ExtractedPdfData | null> = allProcessedData) => {
+    if (pdfObjectUrl) { // Revoke previous object URL before creating a new one
+      URL.revokeObjectURL(pdfObjectUrl);
+      setPdfObjectUrl(null); // Important to avoid using stale URL
+    }
+    
     if (filesToLoad.length === 0 && index === 0) {
-      setPdfObjectUrl(null);
       setPdfDataUri(null);
       setExtractedData(null);
       setError(null);
@@ -54,10 +61,6 @@ export default function PdfExtractorPage() {
   
     if (index >= 0 && index < filesToLoad.length) {
       const file = filesToLoad[index];
-      
-      if (pdfObjectUrl) {
-        URL.revokeObjectURL(pdfObjectUrl);
-      }
       const newObjectUrl = URL.createObjectURL(file);
       setPdfObjectUrl(newObjectUrl);
   
@@ -65,12 +68,15 @@ export default function PdfExtractorPage() {
       reader.onloadend = () => {
         setPdfDataUri(reader.result as string);
       };
+      reader.onerror = () => {
+        setError(`Error reading file: ${file.name}`);
+        setPdfDataUri(null);
+      }
       reader.readAsDataURL(file);
   
-      setExtractedData(null); 
+      setExtractedData(dataToLoad[index] || null); 
       setError(null); 
     } else {
-      setPdfObjectUrl(null);
       setPdfDataUri(null);
       setExtractedData(null);
       setError(null);
@@ -85,15 +91,15 @@ export default function PdfExtractorPage() {
 
   const advanceToNextPdf = () => {
     const newIndex = currentPdfIndex + 1;
+    setCurrentPdfIndex(newIndex); // Update index first
     if (newIndex < pdfFiles.length) {
-      setCurrentPdfIndex(newIndex);
-      loadPdfAtIndex(newIndex, pdfFiles);
+      loadPdfAtIndex(newIndex, pdfFiles, allProcessedData);
     } else {
-      setCurrentPdfIndex(newIndex); 
-      loadPdfAtIndex(newIndex, pdfFiles); 
+      // Still call loadPdfAtIndex to handle UI update for end of queue
+      loadPdfAtIndex(newIndex, pdfFiles, allProcessedData); 
       toast({
         title: "Queue Finished",
-        description: "All PDFs in the queue have been processed and saved.",
+        description: "All PDFs in the queue have been processed and saved (or viewed).",
       });
     }
   };
@@ -105,24 +111,27 @@ export default function PdfExtractorPage() {
       if (newPdfFiles.length > 0) {
         setPdfFiles(newPdfFiles);
         setCurrentPdfIndex(0);
-        loadPdfAtIndex(0, newPdfFiles);
+        const newAllProcessedData = new Array(newPdfFiles.length).fill(null);
+        setAllProcessedData(newAllProcessedData);
+        loadPdfAtIndex(0, newPdfFiles, newAllProcessedData);
         setError(null);
-        setExtractedData(null);
       } else {
         setPdfFiles([]);
         setCurrentPdfIndex(0);
-        loadPdfAtIndex(0, []);
+        setAllProcessedData([]);
+        loadPdfAtIndex(0, [], []);
         setError("Please select valid PDF files.");
         toast({ title: "Invalid Files", description: "No valid PDF files were selected.", variant: "destructive" });
       }
     } else {
       setPdfFiles([]);
       setCurrentPdfIndex(0);
-      loadPdfAtIndex(0, []);
+      setAllProcessedData([]);
+      loadPdfAtIndex(0, [], []);
       setError(null);
     }
     if (event.target) {
-        event.target.value = '';
+        event.target.value = ''; // Reset file input
     }
   };
 
@@ -139,7 +148,7 @@ export default function PdfExtractorPage() {
 
     setIsLoading(true);
     setError(null);
-    setExtractedData(null); 
+    setExtractedData(null); // Clear current view while processing
 
     try {
       const inputArgs: ExtractDataFromPdfInput = { pdfDataUri, extractionEngine };
@@ -149,7 +158,8 @@ export default function PdfExtractorPage() {
         console.error("Error from AI flow:", result.error, "Full result object:", result);
         const displayError = `AI Flow Error: ${result.error}`;
         setError(displayError);
-        setExtractedData(null); 
+        // Do not update allProcessedData on error, keep previous if any
+        setExtractedData(allProcessedData[currentPdfIndex] || null); // Revert to previous data or null
         toast({
           title: "Extraction Failed",
           description: displayError,
@@ -163,6 +173,11 @@ export default function PdfExtractorPage() {
         try {
           const parsedData: ExtractedPdfData = JSON.parse(result.jsonOutput);
           setExtractedData(parsedData);
+          setAllProcessedData(prevAllData => {
+            const newData = [...prevAllData];
+            newData[currentPdfIndex] = parsedData;
+            return newData;
+          });
           toast({
             title: "Data Extracted",
             description: `Data extracted for ${pdfFiles[currentPdfIndex]?.name || 'current PDF'}.`,
@@ -171,7 +186,7 @@ export default function PdfExtractorPage() {
           console.error("Error parsing AI output as JSON:", parseError, "Raw output:", result.jsonOutput);
           const displayError = "Failed to parse AI output. The AI returned an unexpected format.";
           setError(displayError);
-          setExtractedData(null); 
+          setExtractedData(allProcessedData[currentPdfIndex] || null); // Revert to previous data or null
           toast({
             title: "Parsing Failed",
             description: displayError,
@@ -190,8 +205,14 @@ export default function PdfExtractorPage() {
         console.warn("Problematic AI Result:", errorMessage, "Full result object:", result);
         setError(errorMessage);
         try {
-          const parsedData: ExtractedPdfData = result && result.jsonOutput ? JSON.parse(result.jsonOutput) : null;
+          // Attempt to parse even if it's default/empty, to show it in editor.
+          const parsedData: ExtractedPdfData | null = result && result.jsonOutput ? JSON.parse(result.jsonOutput) : null;
           setExtractedData(parsedData); 
+          setAllProcessedData(prevAllData => {
+            const newData = [...prevAllData];
+            newData[currentPdfIndex] = parsedData; // Store the default/empty data too
+            return newData;
+          });
            if (parsedData) {
             toast({
               title: "Extraction Note",
@@ -201,14 +222,14 @@ export default function PdfExtractorPage() {
           }
         } catch (e) {
           console.error("Error parsing even default AI output:", e, "Raw output:", result?.jsonOutput);
-          setExtractedData(null);
+          setExtractedData(allProcessedData[currentPdfIndex] || null); // Revert to previous valid or null
         }
       }
     } catch (err: any) { 
       console.error("Error processing PDF in client:", err);
       const errorMessage = err.message || "An unknown error occurred during PDF processing.";
       setError(errorMessage);
-      setExtractedData(null); 
+      setExtractedData(allProcessedData[currentPdfIndex] || null); // Revert to previous valid or null
       toast({
         title: "Processing Error",
         description: errorMessage,
@@ -221,20 +242,26 @@ export default function PdfExtractorPage() {
 
   const handleDataChange = (updatedData: ExtractedPdfData) => {
     setExtractedData(updatedData);
+    setAllProcessedData(prevAllData => {
+      const newData = [...prevAllData];
+      newData[currentPdfIndex] = updatedData;
+      return newData;
+    });
   };
 
   const handleDownloadJson = () => {
-    if (!extractedData) {
+    const dataToDownload = allProcessedData[currentPdfIndex];
+    if (!dataToDownload) {
       toast({
         title: "No Data",
-        description: "There is no data to download.",
+        description: "There is no data for the current PDF to download.",
         variant: "destructive",
       });
       return;
     }
 
     try {
-      const jsonString = JSON.stringify(extractedData, null, 2);
+      const jsonString = JSON.stringify(dataToDownload, null, 2);
       const blob = new Blob([jsonString], { type: "application/json" });
       const url = URL.createObjectURL(blob);
       const a = document.createElement("a");
@@ -260,10 +287,11 @@ export default function PdfExtractorPage() {
   };
 
   const handleSaveToMongoDb = async () => {
-    if (!extractedData) {
+    const dataToSave = allProcessedData[currentPdfIndex];
+    if (!dataToSave) {
       toast({
         title: "No Data",
-        description: "There is no extracted data to save.",
+        description: "There is no extracted data for the current PDF to save.",
         variant: "destructive",
       });
       return;
@@ -276,7 +304,7 @@ export default function PdfExtractorPage() {
         headers: {
           'Content-Type': 'application/json',
         },
-        body: JSON.stringify(extractedData),
+        body: JSON.stringify(dataToSave),
       });
 
       const result = await response.json();
@@ -306,73 +334,73 @@ export default function PdfExtractorPage() {
     }
   };
 
-  const handleSaveToSheet = async () => {
-    if (!extractedData) {
-      toast({
-        title: "No Data",
-        description: "There is no extracted data to save to Google Sheet.",
-        variant: "destructive",
-      });
-      return;
-    }
+  // const handleSaveToSheet = async () => { // Reverted
+  //   const dataToSave = allProcessedData[currentPdfIndex];
+  //   if (!dataToSave) {
+  //     toast({
+  //       title: "No Data",
+  //       description: "There is no extracted data for the current PDF to save to Google Sheet.",
+  //       variant: "destructive",
+  //     });
+  //     return;
+  //   }
 
-    setIsSavingToSheet(true);
-    try {
-      const result: SaveToGoogleSheetOutput = await saveToGoogleSheet(extractedData);
-      if (result.success) {
-        toast({
-          title: "Saved to Google Sheet",
-          description: `${result.message} for ${pdfFiles[currentPdfIndex]?.name || 'current PDF'}.`,
-        });
-        advanceToNextPdf(); 
-      } else {
-        toast({
-          title: "Google Sheet Save Failed",
-          description: result.message,
-          variant: "destructive",
-        });
-      }
-    } catch (err: any) {
-      console.error("Error saving to Google Sheet via Genkit flow:", err);
-      toast({
-        title: "Google Sheet Save Error",
-        description: err.message || "An unknown error occurred during the Genkit flow.",
-        variant: "destructive",
-      });
-    } finally {
-      setIsSavingToSheet(false);
-    }
-  };
+  //   setIsSavingToSheet(true);
+  //   try {
+  //     const result: SaveToGoogleSheetOutput = await saveToGoogleSheet(dataToSave);
+  //     if (result.success) {
+  //       toast({
+  //         title: "Saved to Google Sheet",
+  //         description: `${result.message} for ${pdfFiles[currentPdfIndex]?.name || 'current PDF'}.`,
+  //       });
+  //       advanceToNextPdf(); 
+  //     } else {
+  //       toast({
+  //         title: "Google Sheet Save Failed",
+  //         description: result.message,
+  //         variant: "destructive",
+  //       });
+  //     }
+  //   } catch (err: any) {
+  //     console.error("Error saving to Google Sheet via Genkit flow:", err);
+  //     toast({
+  //       title: "Google Sheet Save Error",
+  //       description: err.message || "An unknown error occurred during the Genkit flow.",
+  //       variant: "destructive",
+  //     });
+  //   } finally {
+  //     setIsSavingToSheet(false);
+  //   }
+  // };
 
   const handlePreviousPdf = () => {
     if (currentPdfIndex > 0) {
-      setCurrentPdfIndex(prevIndex => {
-        const newIndex = prevIndex - 1;
-        loadPdfAtIndex(newIndex);
-        return newIndex;
-      });
+      const newIndex = currentPdfIndex - 1;
+      setCurrentPdfIndex(newIndex);
+      loadPdfAtIndex(newIndex, pdfFiles, allProcessedData);
     }
   };
 
   const handleNextPdf = () => {
     if (currentPdfIndex < pdfFiles.length - 1) {
-      setCurrentPdfIndex(prevIndex => {
-        const newIndex = prevIndex + 1;
-        loadPdfAtIndex(newIndex);
-        return newIndex;
-      });
-    } else if (currentPdfIndex === pdfFiles.length - 1) {
+      const newIndex = currentPdfIndex + 1;
+      setCurrentPdfIndex(newIndex);
+      loadPdfAtIndex(newIndex, pdfFiles, allProcessedData);
+    } else if (currentPdfIndex === pdfFiles.length - 1 && pdfFiles.length > 0) {
       // If on the last PDF, calling loadPdfAtIndex for pdfFiles.length will trigger "All PDFs Processed"
-      loadPdfAtIndex(pdfFiles.length);
+      // but we still need to update the index to reflect "end of queue" state
+      setCurrentPdfIndex(pdfFiles.length);
+      loadPdfAtIndex(pdfFiles.length, pdfFiles, allProcessedData);
     }
   };
 
   const canProcess = pdfFiles.length > 0 && currentPdfIndex < pdfFiles.length;
-  const isAnySavingInProgress = isSavingToMongoDb || isSavingToSheet;
+  // const isAnySavingInProgress = isSavingToMongoDb || isSavingToSheet; // Reverted
+  const isAnySavingInProgress = isSavingToMongoDb; 
   const isAnyOperationInProgress = isLoading || isAnySavingInProgress;
 
   const processPdfDisabled = isAnyOperationInProgress || !canProcess;
-  const actionButtonsDisabled = !extractedData || isAnyOperationInProgress;
+  const actionButtonsDisabled = !extractedData || isAnyOperationInProgress; // Based on current view's data
   const prevButtonDisabled = currentPdfIndex === 0 || isAnyOperationInProgress || pdfFiles.length === 0;
   const nextButtonDisabled = currentPdfIndex >= pdfFiles.length - 1 || isAnyOperationInProgress || pdfFiles.length === 0;
 
@@ -420,7 +448,7 @@ export default function PdfExtractorPage() {
                   {currentPdfIndex < pdfFiles.length ? (
                     <>Current file: <span className="font-medium text-foreground">{pdfFiles[currentPdfIndex].name}</span> ({currentPdfIndex + 1} of {pdfFiles.length})</>
                   ) : (
-                    <span className="text-green-600 font-medium">All {pdfFiles.length} PDFs viewed.</span>
+                     pdfFiles.length > 0 ? <span className="text-green-600 font-medium">All {pdfFiles.length} PDFs viewed. Queue finished.</span> : "No PDFs in queue."
                   )}
                 </p>
                  <Button
@@ -475,7 +503,7 @@ export default function PdfExtractorPage() {
                 )}
                 {isLoading ? "Processing..." : (canProcess ? `Process PDF ${currentPdfIndex + 1}` : "Process PDF")}
               </Button>
-            {extractedData && (
+            {extractedData && ( // Show action buttons if there's data for the *current* PDF
              <>
                 <Button
                     onClick={handleDownloadJson}
@@ -501,7 +529,7 @@ export default function PdfExtractorPage() {
                     )}
                     {isSavingToMongoDb ? "Saving..." : "Save to DB"}
                 </Button>
-                <Button
+                {/* <Button // Reverted
                     onClick={handleSaveToSheet}
                     disabled={actionButtonsDisabled}
                     variant="outline"
@@ -514,7 +542,7 @@ export default function PdfExtractorPage() {
                         <SheetIcon className="mr-2 h-5 w-5" />
                     )}
                     {isSavingToSheet ? "Saving..." : "Save to Sheet"}
-                </Button>
+                </Button> */}
             </>
           )}
         </div>
@@ -538,3 +566,4 @@ export default function PdfExtractorPage() {
     </div>
   );
 }
+
