@@ -7,44 +7,44 @@ body {
 }
 
 @layer base {
-  :root { /* Light Mode Theme - Polygon University Inspired (Light Version) */
-    --background: 48 100% 90%; /* Light Yellowish Cream */
-    --foreground: 337 50% 27%; /* Dark Maroon/Brown for text */
-    --card: 48 80% 96%; /* Very light yellow, slightly off from background */
-    --card-foreground: 337 50% 27%;
-    --popover: 48 80% 96%;
-    --popover-foreground: 337 50% 27%;
-    --primary: 337 50% 35%; /* Dark Maroon for primary actions */
-    --primary-foreground: 48 100% 95%; /* Very light yellow for text on primary */
-    --secondary: 45 60% 70%; /* Muted gold */
-    --secondary-foreground: 337 50% 27%;
-    --muted: 45 50% 85%; /* Pale yellow */
-    --muted-foreground: 337 30% 45%; /* Medium dark maroon/gray */
-    --accent: 45 85% 55%; /* Bright Gold - like the logo */
-    --accent-foreground: 337 50% 20%; /* Darker Maroon for text on accent */
+  :root { /* Light Mode Theme - Silver & Gold */
+    --background: 220 15% 96%; /* Very Light Cool Gray (Silver) */
+    --foreground: 220 10% 20%; /* Dark Cool Gray for text */
+    --card: 220 15% 99%; /* Almost White, slightly cool for cards */
+    --card-foreground: 220 10% 20%;
+    --popover: 220 15% 99%;
+    --popover-foreground: 220 10% 20%;
+    --primary: 45 85% 55%; /* Bright Gold */
+    --primary-foreground: 220 10% 10%; /* Very Dark Gray for text on gold */
+    --secondary: 220 10% 85%; /* Light Gray for secondary actions */
+    --secondary-foreground: 220 10% 20%; /* Dark Gray text for secondary */
+    --muted: 220 15% 92%; /* Lighter Gray for muted elements */
+    --muted-foreground: 220 10% 40%; /* Medium-dark Gray for muted text */
+    --accent: 45 85% 55%; /* Gold (can be same as primary or a variation) */
+    --accent-foreground: 220 10% 10%; /* Dark text on accent */
     --destructive: 0 70% 50%; /* Standard destructive red */
     --destructive-foreground: 0 0% 95%; /* White text on destructive */
-    --border: 45 50% 80%; /* Pale yellow border */
-    --input: 45 60% 92%; /* Slightly off-white input */
+    --border: 220 15% 88%; /* Light Gray border */
+    --input: 220 15% 94%; /* Slightly darker light gray for input fields */
     --ring: 45 85% 55%; /* Gold for focus rings */
     --chart-1: 45 85% 55%;   /* Gold */
-    --chart-2: 337 50% 35%; /* Dark Maroon */
-    --chart-3: 45 70% 45%;   /* Darker Gold/Brownish */
-    --chart-4: 0 0% 60%;     /* Medium Gray */
-    --chart-5: 337 40% 55%; /* Lighter Maroon */
+    --chart-2: 45 70% 65%;   /* Lighter Gold */
+    --chart-3: 220 10% 50%;  /* Medium Gray */
+    --chart-4: 45 60% 75%;   /* Pale Gold */
+    --chart-5: 220 10% 70%;  /* Light Gray */
     --radius: 0.5rem;
-    /* Sidebar variables for light theme */
-    --sidebar-background: 48 90% 92%; /* Very light yellow for sidebar */
-    --sidebar-foreground: 337 50% 27%; /* Dark maroon text */
+    /* Sidebar variables for light theme (Silver & Gold) */
+    --sidebar-background: 220 15% 94%; /* Slightly darker silver for sidebar */
+    --sidebar-foreground: 220 10% 20%; /* Dark gray text */
     --sidebar-primary: 45 85% 55%; /* Gold for active/primary items */
-    --sidebar-primary-foreground: 337 50% 20%; /* Dark text on gold */
-    --sidebar-accent: 45 70% 85%; /* Accent for hover, pale gold */
-    --sidebar-accent-foreground: 337 50% 27%; /* Dark text for hover */
-    --sidebar-border: 45 50% 80%;
+    --sidebar-primary-foreground: 220 10% 10%; /* Dark text on gold */
+    --sidebar-accent: 220 10% 88%; /* Light gray for hover */
+    --sidebar-accent-foreground: 220 10% 15%; /* Darker gray for hover text */
+    --sidebar-border: 220 15% 85%;
     --sidebar-ring: 45 85% 55%;
   }
 
-  .dark { /* Dark Mode Theme (Polygon University Colors) */
+  .dark { /* Dark Mode Theme (Polygon University Colors - Gold on Dark) */
     --background: 0 0% 12%; /* Dark Gray/Black */
     --foreground: 0 0% 95%; /* Off-white text */
     --card: 0 0% 15%;
