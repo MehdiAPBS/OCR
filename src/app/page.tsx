@@ -10,10 +10,10 @@ import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 import PdfViewer from "@/components/pdf-viewer";
 import DataEditor from "@/components/data-editor";
 import { extractDataFromPdf, type ExtractDataFromPdfOutput, type ExtractDataFromPdfInput } from "@/ai/flows/extract-data-from-pdf";
-// import { saveToGoogleSheet, type SaveToGoogleSheetOutput } from "@/ai/flows/save-to-google-sheet"; // Reverted
+import { saveToGoogleSheet, type SaveToGoogleSheetOutput } from "@/ai/flows/save-to-google-sheet";
 import type { ExtractedPdfData } from "@/ai/schemas/pdf-data-schema";
 import { useToast } from "@/hooks/use-toast";
-import { Cpu, FileJson, Loader2, AlertTriangle, Database, /* Sheet as SheetIcon, */ Settings2, ArrowLeft, ArrowRight } from 'lucide-react'; // Reverted SheetIcon
+import { Cpu, FileJson, Loader2, AlertTriangle, Database, Sheet as SheetIcon, Settings2, ArrowLeft, ArrowRight } from 'lucide-react';
 
 type ExtractionEngine = ExtractDataFromPdfInput['extractionEngine'];
 
@@ -31,7 +31,7 @@ export default function PdfExtractorPage() {
   
   const [isLoading, setIsLoading] = useState<boolean>(false);
   const [isSavingToMongoDb, setIsSavingToMongoDb] = useState<boolean>(false);
-  // const [isSavingToSheet, setIsSavingToSheet] = useState<boolean>(false); // Reverted
+  const [isSavingToSheet, setIsSavingToSheet] = useState<boolean>(false);
   const [error, setError] = useState<string | null>(null);
 
   const { toast } = useToast();
@@ -334,44 +334,44 @@ export default function PdfExtractorPage() {
     }
   };
 
-  // const handleSaveToSheet = async () => { // Reverted
-  //   const dataToSave = allProcessedData[currentPdfIndex];
-  //   if (!dataToSave) {
-  //     toast({
-  //       title: "No Data",
-  //       description: "There is no extracted data for the current PDF to save to Google Sheet.",
-  //       variant: "destructive",
-  //     });
-  //     return;
-  //   }
+  const handleSaveToSheet = async () => {
+    const dataToSave = allProcessedData[currentPdfIndex];
+    if (!dataToSave) {
+      toast({
+        title: "No Data",
+        description: "There is no extracted data for the current PDF to save to Google Sheet.",
+        variant: "destructive",
+      });
+      return;
+    }
 
-  //   setIsSavingToSheet(true);
-  //   try {
-  //     const result: SaveToGoogleSheetOutput = await saveToGoogleSheet(dataToSave);
-  //     if (result.success) {
-  //       toast({
-  //         title: "Saved to Google Sheet",
-  //         description: `${result.message} for ${pdfFiles[currentPdfIndex]?.name || 'current PDF'}.`,
-  //       });
-  //       advanceToNextPdf(); 
-  //     } else {
-  //       toast({
-  //         title: "Google Sheet Save Failed",
-  //         description: result.message,
-  //         variant: "destructive",
-  //       });
-  //     }
-  //   } catch (err: any) {
-  //     console.error("Error saving to Google Sheet via Genkit flow:", err);
-  //     toast({
-  //       title: "Google Sheet Save Error",
-  //       description: err.message || "An unknown error occurred during the Genkit flow.",
-  //       variant: "destructive",
-  //     });
-  //   } finally {
-  //     setIsSavingToSheet(false);
-  //   }
-  // };
+    setIsSavingToSheet(true);
+    try {
+      const result: SaveToGoogleSheetOutput = await saveToGoogleSheet(dataToSave);
+      if (result.success) {
+        toast({
+          title: "Saved to Google Sheet",
+          description: `${result.message} for ${pdfFiles[currentPdfIndex]?.name || 'current PDF'}.`,
+        });
+        advanceToNextPdf(); 
+      } else {
+        toast({
+          title: "Google Sheet Save Failed",
+          description: result.message,
+          variant: "destructive",
+        });
+      }
+    } catch (err: any) {
+      console.error("Error saving to Google Sheet via Genkit flow:", err);
+      toast({
+        title: "Google Sheet Save Error",
+        description: err.message || "An unknown error occurred during the Genkit flow.",
+        variant: "destructive",
+      });
+    } finally {
+      setIsSavingToSheet(false);
+    }
+  };
 
   const handlePreviousPdf = () => {
     if (currentPdfIndex > 0) {
@@ -395,8 +395,7 @@ export default function PdfExtractorPage() {
   };
 
   const canProcess = pdfFiles.length > 0 && currentPdfIndex < pdfFiles.length;
-  // const isAnySavingInProgress = isSavingToMongoDb || isSavingToSheet; // Reverted
-  const isAnySavingInProgress = isSavingToMongoDb; 
+  const isAnySavingInProgress = isSavingToMongoDb || isSavingToSheet;
   const isAnyOperationInProgress = isLoading || isAnySavingInProgress;
 
   const processPdfDisabled = isAnyOperationInProgress || !canProcess;
@@ -529,7 +528,7 @@ export default function PdfExtractorPage() {
                     )}
                     {isSavingToMongoDb ? "Saving..." : "Save to DB"}
                 </Button>
-                {/* <Button // Reverted
+                <Button 
                     onClick={handleSaveToSheet}
                     disabled={actionButtonsDisabled}
                     variant="outline"
@@ -542,7 +541,7 @@ export default function PdfExtractorPage() {
                         <SheetIcon className="mr-2 h-5 w-5" />
                     )}
                     {isSavingToSheet ? "Saving..." : "Save to Sheet"}
-                </Button> */}
+                </Button>
             </>
           )}
         </div>
@@ -567,3 +566,5 @@ export default function PdfExtractorPage() {
   );
 }
 
+
+    

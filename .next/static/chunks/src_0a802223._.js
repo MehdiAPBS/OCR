@@ -774,7 +774,8 @@ function PdfExtractorPage() {
     const [currentPdfIndex, setCurrentPdfIndex] = (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$index$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["useState"])(0);
     const [pdfObjectUrl, setPdfObjectUrl] = (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$index$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["useState"])(null);
     const [pdfDataUri, setPdfDataUri] = (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$index$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["useState"])(null);
-    const [extractedData, setExtractedData] = (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$index$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["useState"])(null);
+    const [extractedData, setExtractedData] = (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$index$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["useState"])(null); // Data for the current PDF
+    const [allProcessedData, setAllProcessedData] = (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$index$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["useState"])([]); // Persisted data for all PDFs
     const [extractionEngine, setExtractionEngine] = (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$index$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["useState"])('genkitDirect');
     const [isLoading, setIsLoading] = (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$index$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["useState"])(false);
     const [isSavingToMongoDb, setIsSavingToMongoDb] = (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$index$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["useState"])(false);
@@ -784,10 +785,11 @@ function PdfExtractorPage() {
     (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$index$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["useEffect"])({
         "PdfExtractorPage.useEffect": ()=>{
             // Cleanup for the current PDF object URL when it changes or component unmounts
+            const currentUrl = pdfObjectUrl;
             return ({
                 "PdfExtractorPage.useEffect": ()=>{
-                    if (pdfObjectUrl) {
-                        URL.revokeObjectURL(pdfObjectUrl);
+                    if (currentUrl) {
+                        URL.revokeObjectURL(currentUrl);
                     }
                 }
             })["PdfExtractorPage.useEffect"];
@@ -795,9 +797,12 @@ function PdfExtractorPage() {
     }["PdfExtractorPage.useEffect"], [
         pdfObjectUrl
     ]);
-    const loadPdfAtIndex = (index, filesToLoad = pdfFiles)=>{
+    const loadPdfAtIndex = (index, filesToLoad = pdfFiles, dataToLoad = allProcessedData)=>{
+        if (pdfObjectUrl) {
+            URL.revokeObjectURL(pdfObjectUrl);
+            setPdfObjectUrl(null); // Important to avoid using stale URL
+        }
         if (filesToLoad.length === 0 && index === 0) {
-            setPdfObjectUrl(null);
             setPdfDataUri(null);
             setExtractedData(null);
             setError(null);
@@ -805,20 +810,20 @@ function PdfExtractorPage() {
         }
         if (index >= 0 && index < filesToLoad.length) {
             const file = filesToLoad[index];
-            if (pdfObjectUrl) {
-                URL.revokeObjectURL(pdfObjectUrl);
-            }
             const newObjectUrl = URL.createObjectURL(file);
             setPdfObjectUrl(newObjectUrl);
             const reader = new FileReader();
             reader.onloadend = ()=>{
                 setPdfDataUri(reader.result);
             };
+            reader.onerror = ()=>{
+                setError(`Error reading file: ${file.name}`);
+                setPdfDataUri(null);
+            };
             reader.readAsDataURL(file);
-            setExtractedData(null);
+            setExtractedData(dataToLoad[index] || null);
             setError(null);
         } else {
-            setPdfObjectUrl(null);
             setPdfDataUri(null);
             setExtractedData(null);
             setError(null);
@@ -832,15 +837,15 @@ function PdfExtractorPage() {
     };
     const advanceToNextPdf = ()=>{
         const newIndex = currentPdfIndex + 1;
+        setCurrentPdfIndex(newIndex); // Update index first
         if (newIndex < pdfFiles.length) {
-            setCurrentPdfIndex(newIndex);
-            loadPdfAtIndex(newIndex, pdfFiles);
+            loadPdfAtIndex(newIndex, pdfFiles, allProcessedData);
         } else {
-            setCurrentPdfIndex(newIndex);
-            loadPdfAtIndex(newIndex, pdfFiles);
+            // Still call loadPdfAtIndex to handle UI update for end of queue
+            loadPdfAtIndex(newIndex, pdfFiles, allProcessedData);
             toast({
                 title: "Queue Finished",
-                description: "All PDFs in the queue have been processed and saved."
+                description: "All PDFs in the queue have been processed and saved (or viewed)."
             });
         }
     };
@@ -851,13 +856,15 @@ function PdfExtractorPage() {
             if (newPdfFiles.length > 0) {
                 setPdfFiles(newPdfFiles);
                 setCurrentPdfIndex(0);
-                loadPdfAtIndex(0, newPdfFiles);
+                const newAllProcessedData = new Array(newPdfFiles.length).fill(null);
+                setAllProcessedData(newAllProcessedData);
+                loadPdfAtIndex(0, newPdfFiles, newAllProcessedData);
                 setError(null);
-                setExtractedData(null);
             } else {
                 setPdfFiles([]);
                 setCurrentPdfIndex(0);
-                loadPdfAtIndex(0, []);
+                setAllProcessedData([]);
+                loadPdfAtIndex(0, [], []);
                 setError("Please select valid PDF files.");
                 toast({
                     title: "Invalid Files",
@@ -868,11 +875,12 @@ function PdfExtractorPage() {
         } else {
             setPdfFiles([]);
             setCurrentPdfIndex(0);
-            loadPdfAtIndex(0, []);
+            setAllProcessedData([]);
+            loadPdfAtIndex(0, [], []);
             setError(null);
         }
         if (event.target) {
-            event.target.value = '';
+            event.target.value = ''; // Reset file input
         }
     };
     const handleProcessPdf = async ()=>{
@@ -887,7 +895,7 @@ function PdfExtractorPage() {
         }
         setIsLoading(true);
         setError(null);
-        setExtractedData(null);
+        setExtractedData(null); // Clear current view while processing
         try {
             const inputArgs = {
                 pdfDataUri,
@@ -898,7 +906,8 @@ function PdfExtractorPage() {
                 console.error("Error from AI flow:", result.error, "Full result object:", result);
                 const displayError = `AI Flow Error: ${result.error}`;
                 setError(displayError);
-                setExtractedData(null);
+                // Do not update allProcessedData on error, keep previous if any
+                setExtractedData(allProcessedData[currentPdfIndex] || null); // Revert to previous data or null
                 toast({
                     title: "Extraction Failed",
                     description: displayError,
@@ -911,6 +920,13 @@ function PdfExtractorPage() {
                 try {
                     const parsedData = JSON.parse(result.jsonOutput);
                     setExtractedData(parsedData);
+                    setAllProcessedData((prevAllData)=>{
+                        const newData = [
+                            ...prevAllData
+                        ];
+                        newData[currentPdfIndex] = parsedData;
+                        return newData;
+                    });
                     toast({
                         title: "Data Extracted",
                         description: `Data extracted for ${pdfFiles[currentPdfIndex]?.name || 'current PDF'}.`
@@ -919,7 +935,7 @@ function PdfExtractorPage() {
                     console.error("Error parsing AI output as JSON:", parseError, "Raw output:", result.jsonOutput);
                     const displayError = "Failed to parse AI output. The AI returned an unexpected format.";
                     setError(displayError);
-                    setExtractedData(null);
+                    setExtractedData(allProcessedData[currentPdfIndex] || null); // Revert to previous data or null
                     toast({
                         title: "Parsing Failed",
                         description: displayError,
@@ -938,8 +954,16 @@ function PdfExtractorPage() {
                 console.warn("Problematic AI Result:", errorMessage, "Full result object:", result);
                 setError(errorMessage);
                 try {
+                    // Attempt to parse even if it's default/empty, to show it in editor.
                     const parsedData = result && result.jsonOutput ? JSON.parse(result.jsonOutput) : null;
                     setExtractedData(parsedData);
+                    setAllProcessedData((prevAllData)=>{
+                        const newData = [
+                            ...prevAllData
+                        ];
+                        newData[currentPdfIndex] = parsedData; // Store the default/empty data too
+                        return newData;
+                    });
                     if (parsedData) {
                         toast({
                             title: "Extraction Note",
@@ -949,14 +973,14 @@ function PdfExtractorPage() {
                     }
                 } catch (e) {
                     console.error("Error parsing even default AI output:", e, "Raw output:", result?.jsonOutput);
-                    setExtractedData(null);
+                    setExtractedData(allProcessedData[currentPdfIndex] || null); // Revert to previous valid or null
                 }
             }
         } catch (err) {
             console.error("Error processing PDF in client:", err);
             const errorMessage = err.message || "An unknown error occurred during PDF processing.";
             setError(errorMessage);
-            setExtractedData(null);
+            setExtractedData(allProcessedData[currentPdfIndex] || null); // Revert to previous valid or null
             toast({
                 title: "Processing Error",
                 description: errorMessage,
@@ -968,18 +992,26 @@ function PdfExtractorPage() {
     };
     const handleDataChange = (updatedData)=>{
         setExtractedData(updatedData);
+        setAllProcessedData((prevAllData)=>{
+            const newData = [
+                ...prevAllData
+            ];
+            newData[currentPdfIndex] = updatedData;
+            return newData;
+        });
     };
     const handleDownloadJson = ()=>{
-        if (!extractedData) {
+        const dataToDownload = allProcessedData[currentPdfIndex];
+        if (!dataToDownload) {
             toast({
                 title: "No Data",
-                description: "There is no data to download.",
+                description: "There is no data for the current PDF to download.",
                 variant: "destructive"
             });
             return;
         }
         try {
-            const jsonString = JSON.stringify(extractedData, null, 2);
+            const jsonString = JSON.stringify(dataToDownload, null, 2);
             const blob = new Blob([
                 jsonString
             ], {
@@ -1008,10 +1040,11 @@ function PdfExtractorPage() {
         }
     };
     const handleSaveToMongoDb = async ()=>{
-        if (!extractedData) {
+        const dataToSave = allProcessedData[currentPdfIndex];
+        if (!dataToSave) {
             toast({
                 title: "No Data",
-                description: "There is no extracted data to save.",
+                description: "There is no extracted data for the current PDF to save.",
                 variant: "destructive"
             });
             return;
@@ -1023,7 +1056,7 @@ function PdfExtractorPage() {
                 headers: {
                     'Content-Type': 'application/json'
                 },
-                body: JSON.stringify(extractedData)
+                body: JSON.stringify(dataToSave)
             });
             const result = await response.json();
             if (response.ok && result.success) {
@@ -1051,17 +1084,18 @@ function PdfExtractorPage() {
         }
     };
     const handleSaveToSheet = async ()=>{
-        if (!extractedData) {
+        const dataToSave = allProcessedData[currentPdfIndex];
+        if (!dataToSave) {
             toast({
                 title: "No Data",
-                description: "There is no extracted data to save to Google Sheet.",
+                description: "There is no extracted data for the current PDF to save to Google Sheet.",
                 variant: "destructive"
             });
             return;
         }
         setIsSavingToSheet(true);
         try {
-            const result = await (0, __TURBOPACK__imported__module__$5b$project$5d2f$src$2f$ai$2f$flows$2f$save$2d$to$2d$google$2d$sheet$2e$ts__$5b$app$2d$client$5d$__$28$ecmascript$29$__["saveToGoogleSheet"])(extractedData);
+            const result = await (0, __TURBOPACK__imported__module__$5b$project$5d2f$src$2f$ai$2f$flows$2f$save$2d$to$2d$google$2d$sheet$2e$ts__$5b$app$2d$client$5d$__$28$ecmascript$29$__["saveToGoogleSheet"])(dataToSave);
             if (result.success) {
                 toast({
                     title: "Saved to Google Sheet",
@@ -1088,30 +1122,28 @@ function PdfExtractorPage() {
     };
     const handlePreviousPdf = ()=>{
         if (currentPdfIndex > 0) {
-            setCurrentPdfIndex((prevIndex)=>{
-                const newIndex = prevIndex - 1;
-                loadPdfAtIndex(newIndex);
-                return newIndex;
-            });
+            const newIndex = currentPdfIndex - 1;
+            setCurrentPdfIndex(newIndex);
+            loadPdfAtIndex(newIndex, pdfFiles, allProcessedData);
         }
     };
     const handleNextPdf = ()=>{
         if (currentPdfIndex < pdfFiles.length - 1) {
-            setCurrentPdfIndex((prevIndex)=>{
-                const newIndex = prevIndex + 1;
-                loadPdfAtIndex(newIndex);
-                return newIndex;
-            });
-        } else if (currentPdfIndex === pdfFiles.length - 1) {
+            const newIndex = currentPdfIndex + 1;
+            setCurrentPdfIndex(newIndex);
+            loadPdfAtIndex(newIndex, pdfFiles, allProcessedData);
+        } else if (currentPdfIndex === pdfFiles.length - 1 && pdfFiles.length > 0) {
             // If on the last PDF, calling loadPdfAtIndex for pdfFiles.length will trigger "All PDFs Processed"
-            loadPdfAtIndex(pdfFiles.length);
+            // but we still need to update the index to reflect "end of queue" state
+            setCurrentPdfIndex(pdfFiles.length);
+            loadPdfAtIndex(pdfFiles.length, pdfFiles, allProcessedData);
         }
     };
     const canProcess = pdfFiles.length > 0 && currentPdfIndex < pdfFiles.length;
     const isAnySavingInProgress = isSavingToMongoDb || isSavingToSheet;
     const isAnyOperationInProgress = isLoading || isAnySavingInProgress;
     const processPdfDisabled = isAnyOperationInProgress || !canProcess;
-    const actionButtonsDisabled = !extractedData || isAnyOperationInProgress;
+    const actionButtonsDisabled = !extractedData || isAnyOperationInProgress; // Based on current view's data
     const prevButtonDisabled = currentPdfIndex === 0 || isAnyOperationInProgress || pdfFiles.length === 0;
     const nextButtonDisabled = currentPdfIndex >= pdfFiles.length - 1 || isAnyOperationInProgress || pdfFiles.length === 0;
     return /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("div", {
@@ -1125,7 +1157,7 @@ function PdfExtractorPage() {
                         children: "PDF Data Extractor"
                     }, void 0, false, {
                         fileName: "[project]/src/app/page.tsx",
-                        lineNumber: 383,
+                        lineNumber: 410,
                         columnNumber: 9
                     }, this),
                     /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("p", {
@@ -1133,13 +1165,13 @@ function PdfExtractorPage() {
                         children: "Upload PDF(s), extract data using AI, edit, and save."
                     }, void 0, false, {
                         fileName: "[project]/src/app/page.tsx",
-                        lineNumber: 386,
+                        lineNumber: 413,
                         columnNumber: 9
                     }, this)
                 ]
             }, void 0, true, {
                 fileName: "[project]/src/app/page.tsx",
-                lineNumber: 382,
+                lineNumber: 409,
                 columnNumber: 7
             }, this),
             /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("div", {
@@ -1156,7 +1188,7 @@ function PdfExtractorPage() {
                                         children: "Upload PDF Document(s)"
                                     }, void 0, false, {
                                         fileName: "[project]/src/app/page.tsx",
-                                        lineNumber: 394,
+                                        lineNumber: 421,
                                         columnNumber: 13
                                     }, this),
                                     /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("div", {
@@ -1171,12 +1203,12 @@ function PdfExtractorPage() {
                                             "aria-label": "Upload PDF Documents"
                                         }, void 0, false, {
                                             fileName: "[project]/src/app/page.tsx",
-                                            lineNumber: 398,
+                                            lineNumber: 425,
                                             columnNumber: 15
                                         }, this)
                                     }, void 0, false, {
                                         fileName: "[project]/src/app/page.tsx",
-                                        lineNumber: 397,
+                                        lineNumber: 424,
                                         columnNumber: 13
                                     }, this),
                                     pdfFiles.length > 0 && /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("div", {
@@ -1192,12 +1224,12 @@ function PdfExtractorPage() {
                                                     className: "h-5 w-5"
                                                 }, void 0, false, {
                                                     fileName: "[project]/src/app/page.tsx",
-                                                    lineNumber: 417,
+                                                    lineNumber: 444,
                                                     columnNumber: 21
                                                 }, this)
                                             }, void 0, false, {
                                                 fileName: "[project]/src/app/page.tsx",
-                                                lineNumber: 410,
+                                                lineNumber: 437,
                                                 columnNumber: 18
                                             }, this),
                                             /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("p", {
@@ -1210,7 +1242,7 @@ function PdfExtractorPage() {
                                                             children: pdfFiles[currentPdfIndex].name
                                                         }, void 0, false, {
                                                             fileName: "[project]/src/app/page.tsx",
-                                                            lineNumber: 421,
+                                                            lineNumber: 448,
                                                             columnNumber: 37
                                                         }, this),
                                                         " (",
@@ -1219,21 +1251,21 @@ function PdfExtractorPage() {
                                                         pdfFiles.length,
                                                         ")"
                                                     ]
-                                                }, void 0, true) : /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("span", {
+                                                }, void 0, true) : pdfFiles.length > 0 ? /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("span", {
                                                     className: "text-green-600 font-medium",
                                                     children: [
                                                         "All ",
                                                         pdfFiles.length,
-                                                        " PDFs viewed."
+                                                        " PDFs viewed. Queue finished."
                                                     ]
                                                 }, void 0, true, {
                                                     fileName: "[project]/src/app/page.tsx",
-                                                    lineNumber: 423,
-                                                    columnNumber: 21
-                                                }, this)
+                                                    lineNumber: 450,
+                                                    columnNumber: 44
+                                                }, this) : "No PDFs in queue."
                                             }, void 0, false, {
                                                 fileName: "[project]/src/app/page.tsx",
-                                                lineNumber: 419,
+                                                lineNumber: 446,
                                                 columnNumber: 17
                                             }, this),
                                             /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])(__TURBOPACK__imported__module__$5b$project$5d2f$src$2f$components$2f$ui$2f$button$2e$tsx__$5b$app$2d$client$5d$__$28$ecmascript$29$__["Button"], {
@@ -1246,18 +1278,18 @@ function PdfExtractorPage() {
                                                     className: "h-5 w-5"
                                                 }, void 0, false, {
                                                     fileName: "[project]/src/app/page.tsx",
-                                                    lineNumber: 433,
+                                                    lineNumber: 460,
                                                     columnNumber: 21
                                                 }, this)
                                             }, void 0, false, {
                                                 fileName: "[project]/src/app/page.tsx",
-                                                lineNumber: 426,
+                                                lineNumber: 453,
                                                 columnNumber: 18
                                             }, this)
                                         ]
                                     }, void 0, true, {
                                         fileName: "[project]/src/app/page.tsx",
-                                        lineNumber: 409,
+                                        lineNumber: 436,
                                         columnNumber: 15
                                     }, this),
                                     pdfFiles.length === 0 && /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("p", {
@@ -1265,13 +1297,13 @@ function PdfExtractorPage() {
                                         children: "No PDF files selected."
                                     }, void 0, false, {
                                         fileName: "[project]/src/app/page.tsx",
-                                        lineNumber: 438,
+                                        lineNumber: 465,
                                         columnNumber: 15
                                     }, this)
                                 ]
                             }, void 0, true, {
                                 fileName: "[project]/src/app/page.tsx",
-                                lineNumber: 393,
+                                lineNumber: 420,
                                 columnNumber: 11
                             }, this),
                             /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("div", {
@@ -1284,14 +1316,14 @@ function PdfExtractorPage() {
                                                 className: "inline-block mr-2 h-5 w-5 text-primary"
                                             }, void 0, false, {
                                                 fileName: "[project]/src/app/page.tsx",
-                                                lineNumber: 445,
+                                                lineNumber: 472,
                                                 columnNumber: 15
                                             }, this),
                                             "Extraction Engine"
                                         ]
                                     }, void 0, true, {
                                         fileName: "[project]/src/app/page.tsx",
-                                        lineNumber: 444,
+                                        lineNumber: 471,
                                         columnNumber: 13
                                     }, this),
                                     /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])(__TURBOPACK__imported__module__$5b$project$5d2f$src$2f$components$2f$ui$2f$radio$2d$group$2e$tsx__$5b$app$2d$client$5d$__$28$ecmascript$29$__["RadioGroup"], {
@@ -1307,7 +1339,7 @@ function PdfExtractorPage() {
                                                         id: "genkitDirect"
                                                     }, void 0, false, {
                                                         fileName: "[project]/src/app/page.tsx",
-                                                        lineNumber: 454,
+                                                        lineNumber: 481,
                                                         columnNumber: 17
                                                     }, this),
                                                     /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])(__TURBOPACK__imported__module__$5b$project$5d2f$src$2f$components$2f$ui$2f$label$2e$tsx__$5b$app$2d$client$5d$__$28$ecmascript$29$__["Label"], {
@@ -1316,13 +1348,13 @@ function PdfExtractorPage() {
                                                         children: "Genkit Direct AI"
                                                     }, void 0, false, {
                                                         fileName: "[project]/src/app/page.tsx",
-                                                        lineNumber: 455,
+                                                        lineNumber: 482,
                                                         columnNumber: 17
                                                     }, this)
                                                 ]
                                             }, void 0, true, {
                                                 fileName: "[project]/src/app/page.tsx",
-                                                lineNumber: 453,
+                                                lineNumber: 480,
                                                 columnNumber: 15
                                             }, this),
                                             /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("div", {
@@ -1333,7 +1365,7 @@ function PdfExtractorPage() {
                                                         id: "googleCloudVision"
                                                     }, void 0, false, {
                                                         fileName: "[project]/src/app/page.tsx",
-                                                        lineNumber: 458,
+                                                        lineNumber: 485,
                                                         columnNumber: 17
                                                     }, this),
                                                     /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])(__TURBOPACK__imported__module__$5b$project$5d2f$src$2f$components$2f$ui$2f$label$2e$tsx__$5b$app$2d$client$5d$__$28$ecmascript$29$__["Label"], {
@@ -1342,31 +1374,31 @@ function PdfExtractorPage() {
                                                         children: "Google Cloud Vision OCR + AI"
                                                     }, void 0, false, {
                                                         fileName: "[project]/src/app/page.tsx",
-                                                        lineNumber: 459,
+                                                        lineNumber: 486,
                                                         columnNumber: 17
                                                     }, this)
                                                 ]
                                             }, void 0, true, {
                                                 fileName: "[project]/src/app/page.tsx",
-                                                lineNumber: 457,
+                                                lineNumber: 484,
                                                 columnNumber: 15
                                             }, this)
                                         ]
                                     }, void 0, true, {
                                         fileName: "[project]/src/app/page.tsx",
-                                        lineNumber: 448,
+                                        lineNumber: 475,
                                         columnNumber: 13
                                     }, this)
                                 ]
                             }, void 0, true, {
                                 fileName: "[project]/src/app/page.tsx",
-                                lineNumber: 443,
+                                lineNumber: 470,
                                 columnNumber: 11
                             }, this)
                         ]
                     }, void 0, true, {
                         fileName: "[project]/src/app/page.tsx",
-                        lineNumber: 392,
+                        lineNumber: 419,
                         columnNumber: 9
                     }, this),
                     /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("div", {
@@ -1382,20 +1414,20 @@ function PdfExtractorPage() {
                                         className: "mr-2 h-5 w-5 animate-spin"
                                     }, void 0, false, {
                                         fileName: "[project]/src/app/page.tsx",
-                                        lineNumber: 472,
+                                        lineNumber: 499,
                                         columnNumber: 19
                                     }, this) : /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])(__TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$lucide$2d$react$2f$dist$2f$esm$2f$icons$2f$cpu$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__$3c$export__default__as__Cpu$3e$__["Cpu"], {
                                         className: "mr-2 h-5 w-5"
                                     }, void 0, false, {
                                         fileName: "[project]/src/app/page.tsx",
-                                        lineNumber: 474,
+                                        lineNumber: 501,
                                         columnNumber: 19
                                     }, this),
                                     isLoading ? "Processing..." : canProcess ? `Process PDF ${currentPdfIndex + 1}` : "Process PDF"
                                 ]
                             }, void 0, true, {
                                 fileName: "[project]/src/app/page.tsx",
-                                lineNumber: 465,
+                                lineNumber: 492,
                                 columnNumber: 13
                             }, this),
                             extractedData && /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])(__TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["Fragment"], {
@@ -1411,14 +1443,14 @@ function PdfExtractorPage() {
                                                 className: "mr-2 h-5 w-5"
                                             }, void 0, false, {
                                                 fileName: "[project]/src/app/page.tsx",
-                                                lineNumber: 487,
+                                                lineNumber: 514,
                                                 columnNumber: 21
                                             }, this),
                                             "Download JSON"
                                         ]
                                     }, void 0, true, {
                                         fileName: "[project]/src/app/page.tsx",
-                                        lineNumber: 480,
+                                        lineNumber: 507,
                                         columnNumber: 17
                                     }, this),
                                     /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])(__TURBOPACK__imported__module__$5b$project$5d2f$src$2f$components$2f$ui$2f$button$2e$tsx__$5b$app$2d$client$5d$__$28$ecmascript$29$__["Button"], {
@@ -1432,20 +1464,20 @@ function PdfExtractorPage() {
                                                 className: "mr-2 h-5 w-5 animate-spin"
                                             }, void 0, false, {
                                                 fileName: "[project]/src/app/page.tsx",
-                                                lineNumber: 498,
+                                                lineNumber: 525,
                                                 columnNumber: 25
                                             }, this) : /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])(__TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$lucide$2d$react$2f$dist$2f$esm$2f$icons$2f$database$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__$3c$export__default__as__Database$3e$__["Database"], {
                                                 className: "mr-2 h-5 w-5"
                                             }, void 0, false, {
                                                 fileName: "[project]/src/app/page.tsx",
-                                                lineNumber: 500,
+                                                lineNumber: 527,
                                                 columnNumber: 25
                                             }, this),
                                             isSavingToMongoDb ? "Saving..." : "Save to DB"
                                         ]
                                     }, void 0, true, {
                                         fileName: "[project]/src/app/page.tsx",
-                                        lineNumber: 490,
+                                        lineNumber: 517,
                                         columnNumber: 17
                                     }, this),
                                     /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])(__TURBOPACK__imported__module__$5b$project$5d2f$src$2f$components$2f$ui$2f$button$2e$tsx__$5b$app$2d$client$5d$__$28$ecmascript$29$__["Button"], {
@@ -1459,20 +1491,20 @@ function PdfExtractorPage() {
                                                 className: "mr-2 h-5 w-5 animate-spin"
                                             }, void 0, false, {
                                                 fileName: "[project]/src/app/page.tsx",
-                                                lineNumber: 512,
+                                                lineNumber: 539,
                                                 columnNumber: 25
                                             }, this) : /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])(__TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$lucide$2d$react$2f$dist$2f$esm$2f$icons$2f$sheet$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__$3c$export__default__as__Sheet$3e$__["Sheet"], {
                                                 className: "mr-2 h-5 w-5"
                                             }, void 0, false, {
                                                 fileName: "[project]/src/app/page.tsx",
-                                                lineNumber: 514,
+                                                lineNumber: 541,
                                                 columnNumber: 25
                                             }, this),
                                             isSavingToSheet ? "Saving..." : "Save to Sheet"
                                         ]
                                     }, void 0, true, {
                                         fileName: "[project]/src/app/page.tsx",
-                                        lineNumber: 504,
+                                        lineNumber: 531,
                                         columnNumber: 17
                                     }, this)
                                 ]
@@ -1480,7 +1512,7 @@ function PdfExtractorPage() {
                         ]
                     }, void 0, true, {
                         fileName: "[project]/src/app/page.tsx",
-                        lineNumber: 464,
+                        lineNumber: 491,
                         columnNumber: 10
                     }, this),
                     error && /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])(__TURBOPACK__imported__module__$5b$project$5d2f$src$2f$components$2f$ui$2f$alert$2e$tsx__$5b$app$2d$client$5d$__$28$ecmascript$29$__["Alert"], {
@@ -1491,33 +1523,33 @@ function PdfExtractorPage() {
                                 className: "h-5 w-5"
                             }, void 0, false, {
                                 fileName: "[project]/src/app/page.tsx",
-                                lineNumber: 523,
+                                lineNumber: 550,
                                 columnNumber: 13
                             }, this),
                             /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])(__TURBOPACK__imported__module__$5b$project$5d2f$src$2f$components$2f$ui$2f$alert$2e$tsx__$5b$app$2d$client$5d$__$28$ecmascript$29$__["AlertTitle"], {
                                 children: "Error"
                             }, void 0, false, {
                                 fileName: "[project]/src/app/page.tsx",
-                                lineNumber: 524,
+                                lineNumber: 551,
                                 columnNumber: 13
                             }, this),
                             /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])(__TURBOPACK__imported__module__$5b$project$5d2f$src$2f$components$2f$ui$2f$alert$2e$tsx__$5b$app$2d$client$5d$__$28$ecmascript$29$__["AlertDescription"], {
                                 children: error
                             }, void 0, false, {
                                 fileName: "[project]/src/app/page.tsx",
-                                lineNumber: 525,
+                                lineNumber: 552,
                                 columnNumber: 13
                             }, this)
                         ]
                     }, void 0, true, {
                         fileName: "[project]/src/app/page.tsx",
-                        lineNumber: 522,
+                        lineNumber: 549,
                         columnNumber: 11
                     }, this)
                 ]
             }, void 0, true, {
                 fileName: "[project]/src/app/page.tsx",
-                lineNumber: 391,
+                lineNumber: 418,
                 columnNumber: 7
             }, this),
             /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("main", {
@@ -1529,12 +1561,12 @@ function PdfExtractorPage() {
                             pdfUrl: pdfObjectUrl
                         }, void 0, false, {
                             fileName: "[project]/src/app/page.tsx",
-                            lineNumber: 532,
+                            lineNumber: 559,
                             columnNumber: 11
                         }, this)
                     }, void 0, false, {
                         fileName: "[project]/src/app/page.tsx",
-                        lineNumber: 531,
+                        lineNumber: 558,
                         columnNumber: 9
                     }, this),
                     /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("section", {
@@ -1544,28 +1576,28 @@ function PdfExtractorPage() {
                             onDataChange: handleDataChange
                         }, void 0, false, {
                             fileName: "[project]/src/app/page.tsx",
-                            lineNumber: 535,
+                            lineNumber: 562,
                             columnNumber: 11
                         }, this)
                     }, void 0, false, {
                         fileName: "[project]/src/app/page.tsx",
-                        lineNumber: 534,
+                        lineNumber: 561,
                         columnNumber: 9
                     }, this)
                 ]
             }, void 0, true, {
                 fileName: "[project]/src/app/page.tsx",
-                lineNumber: 530,
+                lineNumber: 557,
                 columnNumber: 7
             }, this)
         ]
     }, void 0, true, {
         fileName: "[project]/src/app/page.tsx",
-        lineNumber: 381,
+        lineNumber: 408,
         columnNumber: 5
     }, this);
 }
-_s(PdfExtractorPage, "4fNJq3Y7SAYJ82pPtuQhf/k/xL4=", false, function() {
+_s(PdfExtractorPage, "WCO1by+ZZXs4qnG08t2XbuNtkXE=", false, function() {
     return [
         __TURBOPACK__imported__module__$5b$project$5d2f$src$2f$hooks$2f$use$2d$toast$2e$ts__$5b$app$2d$client$5d$__$28$ecmascript$29$__["useToast"]
     ];
